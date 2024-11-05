@@ -5,7 +5,7 @@ namespace Gpio {
 // ========================= Реализация класса GPIO-выход ====================
 
 // Внутренний метод инициализация пина с указанием инверсной логики
-esp_err_t GpioOutput::_init(const gpio_num_t pin, const bool invert_logic) {
+esp_err_t GpioOutput::_init(void) {
 
   esp_err_t status{ESP_OK};
 
@@ -24,16 +24,14 @@ esp_err_t GpioOutput::_init(const gpio_num_t pin, const bool invert_logic) {
 // Конструктор по умолчанию для GPIO-выхода с указанием инверсной логики
 GpioOutput::GpioOutput(const gpio_num_t pin, const bool invert_logic)
     : BaseGpio(pin, invert_logic) {
-  _init(_pin, _invert_logic);
+  _init();
 }
 
 // Конструктор по умолчанию для GPIO-выхода без указания инверсной логики
-GpioOutput::GpioOutput(const gpio_num_t pin) : BaseGpio(pin, false) {
-  _init(_pin, _invert_logic);
-}
+GpioOutput::GpioOutput(const gpio_num_t pin) : BaseGpio(pin, false) { _init(); }
 
 // Инициализация пина с указанием инверсной логики
-esp_err_t GpioOutput::init(void) { return _init(_pin, _invert_logic); }
+esp_err_t GpioOutput::init(void) { return _init(); }
 
 // Установить уровень выходного пина
 esp_err_t GpioOutput::set_level(const bool level) {

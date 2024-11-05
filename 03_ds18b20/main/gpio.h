@@ -24,7 +24,7 @@ class GpioOutput : public BaseGpio {
 private:
   bool _level = false; // уровень выходного пина
   // Функция инициализации пина
-  esp_err_t _init(const gpio_num_t pin, const bool invert_logic);
+  esp_err_t _init(void);
 
 public:
   GpioOutput(const gpio_num_t pin, const bool invert_logic);
