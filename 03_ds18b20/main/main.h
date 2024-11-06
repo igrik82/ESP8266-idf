@@ -9,5 +9,5 @@ class Main final {
 public:
   esp_err_t setup(void);
   void loop(void);
-  Gpio::GpioOutput led{GPIO_NUM_2, true};
+  Gpio::Gpio led{GPIO_NUM_2, true};
 };

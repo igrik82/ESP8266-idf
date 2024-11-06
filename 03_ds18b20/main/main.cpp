@@ -18,7 +18,7 @@ esp_err_t Main::setup(void) {
   ESP_LOGI(LOG_TAG, "Setup ok!");
   esp_err_t status{ESP_OK};
 
-  led.init();
+  led.output();
   return status;
 }
 
