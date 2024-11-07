@@ -7,26 +7,26 @@ namespace Gpio {
 
 class Gpio {
 protected:
-  const gpio_num_t _pin; // номер пина
-  bool _invert_logic;    // инвертировать логику
-  bool _level;           // уровень выходного пина
+  const gpio_num_t _pin; // Mask for the pin
+  bool _invert_logic;    // Invert logic
+  bool _level;           // Output level
   bool _is_output;
 
-  // Функция инициализации пина
+  // Initialization of the GPIO pin in output/input mode
   esp_err_t _mode_output(void);
   esp_err_t _mode_input(void);
 
 public:
-  // =================== Конструктор ====================
+  // =================== Constructor ====================
   Gpio(const gpio_num_t pin, const bool invert_logic);
   Gpio(const gpio_num_t pin);
 
-  // =================== GPIO-выход =====================
+  // =================== GPIO-output ====================
   esp_err_t output(void);
   esp_err_t set_level(bool level);
   esp_err_t toggle(void);
 
-  // ================== GPIO-вход =======================
+  // =================== GPIO-input =====================
   esp_err_t input(void);
   uint8_t read(void);
 }; // class Gpio

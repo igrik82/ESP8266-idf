@@ -2,25 +2,26 @@
 #include "esp_err.h"
 
 namespace Gpio {
-// Конструктор по умолчанию для GPIO
+// Constructor by default for GPIO
 Gpio::Gpio(const gpio_num_t pin, const bool invert_logic)
     : _pin{pin}, _invert_logic{invert_logic} {};
 Gpio::Gpio(const gpio_num_t pin) : _pin{pin}, _invert_logic{false} {};
 
-// ========================= Реализация GPIO-выход ====================
+// ========================= GPIO-output ===============================
 
-// Функция инициализации пина
+// Initialization of the GPIO pin in output mode
+//
 esp_err_t Gpio::_mode_output(void) {
 
   esp_err_t status{ESP_OK};
 
-  // Конфигурируем пин
+  // Configuration of the GPIO pin
   gpio_config_t cfg;
-  cfg.pin_bit_mask = 1ULL << _pin; // Выставляем битовую маску пина
-  cfg.mode = GPIO_MODE_OUTPUT; // Режим выхода
-  cfg.pull_up_en = GPIO_PULLUP_DISABLE; // Отключаем подтягивающий резистор
-  cfg.pull_down_en = GPIO_PULLDOWN_DISABLE; // Отключаем резистор на землю
-  cfg.intr_type = GPIO_INTR_DISABLE; // Отключаем прерывания
+  cfg.pin_bit_mask = 1ULL << _pin;          // Bit mask for the pin
+  cfg.mode = GPIO_MODE_OUTPUT;              // Mode output
+  cfg.pull_up_en = GPIO_PULLUP_DISABLE;     // Disable pull-up resistor
+  cfg.pull_down_en = GPIO_PULLDOWN_DISABLE; // Disable pull-down resistor
+  cfg.intr_type = GPIO_INTR_DISABLE;        // Disable interrupt
 
   status |= gpio_config(&cfg);
   _is_output = true;
@@ -30,7 +31,7 @@ esp_err_t Gpio::_mode_output(void) {
 
 esp_err_t Gpio::output(void) { return _mode_output(); };
 
-// Установить уровень выходного пина
+// Set the output level
 esp_err_t Gpio::set_level(const bool level) {
   if (_is_output) {
     _level = _invert_logic ? !level : level;
@@ -39,7 +40,7 @@ esp_err_t Gpio::set_level(const bool level) {
   return ESP_FAIL;
 }
 
-// Переключить уровень выходного пина
+// Toggle the output level.
 esp_err_t Gpio::toggle(void) {
   if (_is_output) {
     _level = !_level;
@@ -48,12 +49,12 @@ esp_err_t Gpio::toggle(void) {
   return ESP_FAIL;
 }
 
-// ========================= Реализация GPIO-вход =====================
+// ========================= GPIO-input ===============================
 esp_err_t Gpio::_mode_input(void) {
 
   esp_err_t status{ESP_OK};
 
-  // Конфигурируем пин
+  // Configuration of the GPIO pin.
   gpio_config_t cfg;
   cfg.pin_bit_mask = 1ULL << _pin; // Выставляем битовую маску пина
   cfg.mode = GPIO_MODE_INPUT; // Режим выхода
@@ -67,12 +68,15 @@ esp_err_t Gpio::_mode_input(void) {
   return status;
 };
 
-// Инициализация пина в режиме GPIO-входа
+// Initialization of the GPIO pin in input mode
 esp_err_t Gpio::input(void) { return _mode_input(); };
 
-// Чтение уровня входного пина
+// Read the input level.
+// If it's output, return ESP_FAIL.
 uint8_t Gpio::read(void) {
-  // WARNING: Нет проверки на состояние выходного пина
+  if (_is_output) {
+    return ESP_FAIL;
+  }
   return _invert_logic ? !gpio_get_level(_pin) : gpio_get_level(_pin);
 };
 } // namespace Gpio
