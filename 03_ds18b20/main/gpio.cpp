@@ -56,11 +56,11 @@ esp_err_t Gpio::_mode_input(void) {
 
   // Configuration of the GPIO pin.
   gpio_config_t cfg;
-  cfg.pin_bit_mask = 1ULL << _pin; // Выставляем битовую маску пина
-  cfg.mode = GPIO_MODE_INPUT; // Режим выхода
-  cfg.pull_up_en = GPIO_PULLUP_DISABLE; // Отключаем подтягивающий резистор
-  cfg.pull_down_en = GPIO_PULLDOWN_DISABLE; // Отключаем резистор на землю
-  cfg.intr_type = GPIO_INTR_DISABLE; // Отключаем прерывания
+  cfg.pin_bit_mask = 1ULL << _pin;          // Bit mask for the pin
+  cfg.mode = GPIO_MODE_INPUT;               // Mode input
+  cfg.pull_up_en = GPIO_PULLUP_DISABLE;     // Disable pull-up resistor
+  cfg.pull_down_en = GPIO_PULLDOWN_DISABLE; // Disable pull-down resistor
+  cfg.intr_type = GPIO_INTR_DISABLE;        // Disable interrupt
 
   status |= gpio_config(&cfg);
   _is_output = false;
