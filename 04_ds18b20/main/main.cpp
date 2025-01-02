@@ -3,8 +3,8 @@
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/task.h"
 #include "gpio.h"
-#include <cstdint>
-#include <cstdio>
+// #include <cstdint>
+// #include <cstdio>
 
 #define pdMILISECONDS pdMS_TO_TICKS
 
