@@ -99,7 +99,7 @@ extern "C" void app_main(void)
     //     &get_temperature_handle);
     // xTaskCreate(heapMonitor, "HeapMonitor", 1024, NULL, 5, NULL);
 
-    // ======================== Read temperature ==============================
+    // ======================== FreeRTOS specific =============================
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
