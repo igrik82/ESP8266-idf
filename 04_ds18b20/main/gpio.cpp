@@ -1,11 +1,11 @@
 #include "gpio.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "rom/ets_sys.h"
 
 namespace OneWire {
 
 // ========================= Initialization ===============================
-
 // Constructor by default for GPIO
 DS18B20::DS18B20(const gpio_num_t pin)
     : _pin { pin }
@@ -44,8 +44,7 @@ esp_err_t DS18B20::_init_one_wire_gpio(void)
     return status;
 };
 
-// ================ GPIO-mode & level +================
-
+// ================ GPIO-mode & level =========================================
 // Set GPIO direction
 esp_err_t DS18B20::pin_direction(gpio_mode_t direction)
 {
@@ -77,8 +76,7 @@ uint8_t DS18B20::get_pin_level(void)
     return _invert_logic ? !gpio_get_level(_pin) : gpio_get_level(_pin);
 };
 
-// ========================= 1-Wire ===============================
-
+// ========================= 1-Wire ===========================================
 // Reset signal
 esp_err_t DS18B20::reset(void)
 {
@@ -103,26 +101,17 @@ esp_err_t DS18B20::reset(void)
 
     // Check presence
     pin_direction(GPIO_MODE_INPUT);
-    esp_delay_us(RECOVERY_DURATION);
+    esp_delay_us(BUS_RECOVERY_DURATION);
     uint8_t response_time = 0;
     while (get_pin_level() == 1) {
-        if (response_time > RESPONSE_MAX_DURATION) {
+        if (response_time > SLAVE_RESPONSE_MAX_DURATION) {
             ESP_LOGE(TAG, "Onewire reset fail. Timeout exceeded.");
             return ESP_ERR_TIMEOUT;
         }
         ++response_time;
         esp_delay_us(1);
     }
-    uint8_t presence_time = 0;
-    while (get_pin_level() == 0) {
-        if (presence_time > PRESENCE_PULSE_MAX_DURATION) {
-            ESP_LOGE(TAG, "Onewire reset fail. Timeout exceeded.");
-            return ESP_ERR_TIMEOUT;
-        }
-        ++presence_time;
-        esp_delay_us(1);
-    }
-    esp_delay_us(MASTER_RESET_PULSE_DURATION - response_time - presence_time);
+    esp_delay_us(RECOVERY_AFTER_RESET_PULSE);
     ESP_LOGI(TAG, "Onewire reset success.");
     return ESP_OK;
 }
@@ -132,18 +121,18 @@ void DS18B20::write_bit(uint8_t bit)
 {
     if (bit) {
         // bit is 1
-        esp_delay_us(TIME_SLOT_START_DURATION);
+        ets_delay_us(PAUSE_BETWEEN_TIME_SLOTS);
         set_level(0);
-        ets_delay_us(ONE_BIT_DATA_DURATION);
+        ets_delay_us(MASTER_WRITE_1_PULSE_DURATION);
         set_level(1);
-        ets_delay_us(TIME_SLOT_DURATION);
+        ets_delay_us(MASTER_WRITE_1_RECOVERY_DURATION);
     } else {
         // bit is 0
-        esp_delay_us(TIME_SLOT_START_DURATION);
+        ets_delay_us(PAUSE_BETWEEN_TIME_SLOTS);
         set_level(0);
-        ets_delay_us(ZERO_BIT_DATA_DURATION);
+        ets_delay_us(MASTER_WRITE_0_PULSE_DURATION);
         set_level(1);
-        ets_delay_us(RECOVERY_DURATION);
+        ets_delay_us(MASTER_WRITE_0_RECOVERY_DURATION);
     }
 }
 
@@ -151,7 +140,7 @@ void DS18B20::write_bit(uint8_t bit)
 void DS18B20::write_byte(uint8_t byte)
 {
     pin_direction(GPIO_MODE_OUTPUT);
-    ets_delay_us(RECOVERY_DURATION);
+    ets_delay_us(BUS_RECOVERY_DURATION);
 
     for (uint8_t i = 0; i < 8; i++) {
         write_bit(byte & 0x01);
@@ -163,13 +152,14 @@ void DS18B20::write_byte(uint8_t byte)
 uint8_t DS18B20::read_bit(void)
 {
     pin_direction(GPIO_MODE_OUTPUT);
+    ets_delay_us(BUS_RECOVERY_DURATION);
     set_level(0);
-    esp_delay_us(ONE_BIT_DATA_DURATION);
+    esp_delay_us(MASTER_READ_PULSE_DURATION);
     set_level(1);
     pin_direction(GPIO_MODE_INPUT);
-    esp_delay_us(ONE_BIT_DATA_DURATION);
+    esp_delay_us(MASTER_READ_SAMPLE);
     uint8_t bit = get_pin_level();
-    esp_delay_us(TIME_SLOT_DURATION - ONE_BIT_DATA_DURATION);
+    esp_delay_us(MASTER_READ_RECOVERY_DURATION);
     return bit;
 }
 
@@ -193,7 +183,7 @@ esp_err_t DS18B20::readROM(void)
         return ESP_FAIL;
     }
     write_byte(READ_ROM); // READ ROM command
-    ets_delay_us(TIME_SLOT_START_DURATION);
+    // ets_delay_us(TIME_SLOT_START_DURATION);
     uint8_t buf[8] = { 0 };
 
     for (uint8_t i = 0; i < 8; i++) {
@@ -224,13 +214,12 @@ esp_err_t DS18B20::match_rom(uint8_t (&address)[8])
     }
 
     write_byte(MATCH_ROM); // MATCH ROM command
-    ets_delay_us(TIME_SLOT_START_DURATION);
 
     for (uint8_t i = 0; i < 8; i++) {
         write_byte(address[i]);
     }
 
-    ESP_LOGI(TAG, "Read ROM command success.");
+    ESP_LOGI(TAG, "Match ROM command success.");
     return ESP_OK;
 }
 
@@ -240,11 +229,10 @@ esp_err_t DS18B20::get_temp(uint8_t (&address)[8], float& temperature)
 
     match_rom(address); // Set address
     write_byte(CONVERT_T); // Convert temperature
-    ets_delay_us(TIME_SLOT_START_DURATION);
+    ets_delay_us(WAIT_FOR_TEMPERATURE_CONVERSION);
 
     match_rom(address);
     write_byte(READ_SCRATCHPAD); // READ SCRATCHPAD command
-    ets_delay_us(TIME_SLOT_START_DURATION);
 
     uint8_t data[9];
 
