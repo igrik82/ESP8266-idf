@@ -2,7 +2,13 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "rom/ets_sys.h"
-
+/*
+ * TODO:
+ *
+ * taskENTER_CRITICAL();
+ * // Доступ к защищенной переменной
+ * taskEXIT_CRITICAL();
+ */
 namespace OneWire {
 
 // ========================= Initialization ===============================
@@ -119,6 +125,7 @@ esp_err_t DS18B20::reset(void)
 // Write bit
 void DS18B20::write_bit(uint8_t bit)
 {
+    // BUG: Must be a critical section here
     if (bit) {
         // bit is 1
         ets_delay_us(PAUSE_BETWEEN_TIME_SLOTS);
@@ -151,6 +158,7 @@ void DS18B20::write_byte(uint8_t byte)
 // Read bit
 uint8_t DS18B20::read_bit(void)
 {
+    // BUG: Must be a critical section here
     pin_direction(GPIO_MODE_OUTPUT);
     ets_delay_us(BUS_RECOVERY_DURATION);
     set_level(0);
