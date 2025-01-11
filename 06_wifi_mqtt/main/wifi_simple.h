@@ -53,7 +53,18 @@ private:
 #if CONFIG_CUSTOM_MAC
     const uint8_t _mac_addr[6] { 0xFC, 0x19, 0x99, 0xA4, 0xB9, 0x08 };
 #endif
-
+    /*
+        wifi 0 bit - connected
+        wifi 1 bit - disconnected
+        wifi 2 bit - got ip
+        wifi 3 bit - lost ip
+        wifi 4 bit - reserved
+        mqtt 5 bit - connected
+        mqtt 6 bit - disconnected
+        mqtt 7 bit - subscribed
+        mqtt 8 bit - unsubscribed
+        mqtt 9 bit - reserved
+    */
     constexpr static uint8_t _wifi_connect_bit { BIT0 };
     constexpr static uint8_t _wifi_disconnect_bit { BIT1 };
     constexpr static uint8_t _wifi_got_ip { BIT2 };
@@ -68,7 +79,7 @@ private:
     esp_err_t _led_on(void);
     esp_err_t _led_off(void);
 
-    static EventGroupHandle_t _wifi_event_group;
+    // static EventGroupHandle_t _wifi_event_group;
     static void _event_handler(void* arg, esp_event_base_t event_base,
         int32_t event_id, void* event_data);
     static void _wifi_event_handler(void* arg, esp_event_base_t event_base,
