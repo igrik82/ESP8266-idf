@@ -1,29 +1,54 @@
 #include "mqtt.h"
+#include "esp_log.h"
+#include "mqtt_client.h"
 
 extern EventGroupHandle_t common_event_group;
+extern uint8_t _wifi_connect_bit;
+extern uint8_t _wifi_disconnect_bit;
+extern uint8_t _wifi_got_ip;
+extern uint8_t _wifi_lost_ip;
 
 namespace Mqtt_NS {
 
 // Static variables
 esp_mqtt_client_config_t Mqtt::mqtt_cfg {};
+Mqtt::state_m Mqtt::_state { Mqtt::state_m::NOT_INITIALISED };
 
 Mqtt::Mqtt(void)
 {
-    ESP_LOGI(TAG, "[APP] Startup..");
-    ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
-    ESP_LOGI(TAG, "[APP] IDF version: %s", esp_get_idf_version());
-    mqtt_cfg.uri = CONFIG_BROKER_URL;
-    mqtt_cfg.port = CONFIG_BROKER_PORT;
-    mqtt_cfg.client_id = CONFIG_CLIENT_ID;
-    mqtt_cfg.username = CONFIG_MQTT_USER;
-    mqtt_cfg.password = CONFIG_MQTT_PASSWORD;
-    mqtt_cfg.keepalive = CONFIG_MQTT_KEEP_ALIVE;
-    ESP_LOGI(TAG, "MQTT client init");
-    client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler,
-        NULL);
-    if (ESP_OK == esp_mqtt_client_start(client)) {
-        ESP_LOGI(TAG, "MQTT client started");
+    if (_state == state_m::NOT_INITIALISED) {
+        mqtt_cfg.uri = CONFIG_BROKER_URL;
+        mqtt_cfg.port = CONFIG_BROKER_PORT;
+        mqtt_cfg.client_id = CONFIG_CLIENT_ID;
+        mqtt_cfg.username = CONFIG_MQTT_USER;
+        mqtt_cfg.password = CONFIG_MQTT_PASSWORD;
+        mqtt_cfg.keepalive = CONFIG_MQTT_KEEP_ALIVE;
+        mqtt_cfg.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
+        ESP_LOGI(TAG, "MQTT client init");
+        client = esp_mqtt_client_init(&mqtt_cfg);
+        esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler,
+            NULL);
+
+        _state = state_m::INITIALISED;
+    }
+    for (;;) {
+        EventBits_t bits = xEventGroupWaitBits(common_event_group,
+            _wifi_got_ip | _wifi_disconnect_bit,
+            pdFALSE, pdFALSE, portMAX_DELAY);
+        if (bits & _wifi_got_ip) {
+            ESP_LOGI(TAG, "[APP] Startup..");
+            ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
+            esp_mqtt_client_start(client);
+            ESP_LOGI(TAG, "Client started");
+            xEventGroupClearBits(common_event_group, _wifi_got_ip);
+        } else if (bits & _wifi_disconnect_bit) {
+            // BUG: If stopped it crash
+            xEventGroupClearBits(common_event_group, _wifi_disconnect_bit);
+            // esp_mqtt_client_stop(client);
+            // esp_mqtt_client_destroy(client);
+            // _state = state_m::NOT_INITIALISED;
+            ESP_LOGI(TAG, "Client stopped");
+        }
     }
 }
 
@@ -85,6 +110,6 @@ void Mqtt::mqtt_event_handler(void* handler_args, esp_event_base_t base,
     mqtt_event_handler_cb((esp_mqtt_event_handle_t)event_data);
 }
 
-void Mqtt::start(void) { esp_mqtt_client_start(client); }
+void Mqtt::start(void) { }
 
 } // namespace Mqtt_NS

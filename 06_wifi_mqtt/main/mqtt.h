@@ -11,6 +11,17 @@ namespace Mqtt_NS {
 
 class Mqtt {
 private:
+    enum class state_m {
+        NOT_INITIALISED,
+        INITIALISED,
+        // READY_TO_CONNECT,
+        // CONNECTING,
+        // WAITING_FOR_IP,
+        // CONNECTED,
+        // DISCONNECTED,
+        // ERROR
+    };
+    static state_m _state;
     esp_mqtt_client_handle_t client;
     static esp_mqtt_client_config_t mqtt_cfg;
     /*

@@ -65,10 +65,6 @@ private:
         mqtt 8 bit - unsubscribed
         mqtt 9 bit - reserved
     */
-    constexpr static uint8_t _wifi_connect_bit { BIT0 };
-    constexpr static uint8_t _wifi_disconnect_bit { BIT1 };
-    constexpr static uint8_t _wifi_got_ip { BIT2 };
-    constexpr static uint8_t _wifi_lost_ip { BIT3 };
 
     static wifi_init_config_t _wifi_init_config;
     static wifi_config_t wifi_config;
