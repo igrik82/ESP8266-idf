@@ -21,6 +21,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "nvs_flash.h" // IWYU pragma: keep
+#include "secrets.h" // IWYU pragma: keep
 #include <cstring>
 
 // Power mode Wi-FI

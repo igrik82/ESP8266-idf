@@ -19,8 +19,8 @@ Wifi::Wifi(void)
         &_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, ESP_EVENT_ANY_ID,
         &_event_handler, NULL));
-    memcpy(wifi_config.sta.ssid, CONFIG_SSID, strlen(CONFIG_SSID));
-    memcpy(wifi_config.sta.password, CONFIG_PASSWORD, strlen(CONFIG_PASSWORD));
+    memcpy(wifi_config.sta.ssid, WIFI_SSID, strlen(WIFI_SSID));
+    memcpy(wifi_config.sta.password, WIFI_PASSWORD, strlen(WIFI_PASSWORD));
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
