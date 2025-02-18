@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.8)
 set(CMAKE_CXX_STANDARD 11)
 # set(EXTRA_COMPONENT_DIRS main build)
-# project(LANGUAGES CXX)
+# project(ds18b20)
 # # Укажите имя проекта и язык C++
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -11,4 +11,4 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 
-project(DS18B20)
+project(ds18b20)
