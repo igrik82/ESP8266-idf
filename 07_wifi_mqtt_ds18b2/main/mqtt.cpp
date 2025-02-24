@@ -98,10 +98,10 @@ void Mqtt::start()
         _wifi_got_ip | _wifi_disconnect_bit,
         pdFALSE, pdFALSE, portMAX_DELAY);
     if (bits & _wifi_got_ip) {
-        ESP_LOGI(TAG, "[APP] Startup..");
-        ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
+        ESP_LOGI(TAG, "MQTT Startup..");
+        // ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
         esp_mqtt_client_start(client);
-        ESP_LOGI(TAG, "Client started");
+        ESP_LOGI(TAG, "Client MQTT started");
         xEventGroupClearBits(common_event_group, _wifi_got_ip);
 
         // Publish sensor data

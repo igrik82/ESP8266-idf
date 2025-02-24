@@ -1,4 +1,5 @@
 #include "FreeRTOS.h" // IWYU pragma: keep
+#include "driver/ledc.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -105,14 +106,14 @@ void heapMonitor(void* pvParameter)
 
 extern "C" void app_main(void)
 {
-    //============================ Logging ====================================
+    // =========================== Logging ====================================
     // Set log level in this scope
     // [[maybe_unused]] const char* TAG = "Wi-Fi";
     // esp_log_level_set(TAG, ESP_LOG_INFO);
     // esp_log_level_set("*", ESP_LOG_VERBOSE);
     esp_log_level_set("*", ESP_LOG_ERROR);
 
-    //========================== Initialization ===============================
+    // ========================= Initialization ===============================
 
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -137,7 +138,7 @@ extern "C" void app_main(void)
 
     Temp_param param = { onewire_pin, ds18b20_address };
 
-    // //======================== Tasks looping ==================================
+    // ======================= Tasks looping ==================================
     xTaskCreate(wifi_connection, "Wifi", 1024 * 2, &wifi, 5,
         &wifi_connection_handle);
 
@@ -149,9 +150,9 @@ extern "C" void app_main(void)
 
     // Debug tasks
     // xTaskCreate(checkStackUsage, "CheckStack", 1024 * 2, NULL, 5, NULL);
-    // xTaskCreate(heapMonitor, "HeapMonitor", 1024 * 2, NULL, 5, NULL);
+    xTaskCreate(heapMonitor, "HeapMonitor", 1024 * 2, NULL, 5, NULL);
 
-    // ======================== FreeRTOS specific =============================
+    // ======================= FreeRTOS specific =============================
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
