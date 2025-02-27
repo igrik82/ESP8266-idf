@@ -138,18 +138,18 @@ extern "C" void app_main(void)
     Temp_param param = { onewire_pin, ds18b20_address };
 
     // ======================= Tasks looping ==================================
-    xTaskCreate(wifi_connection, "Wifi", 1024 * 2, &wifi, 5,
+    xTaskCreate(&wifi_connection, "Wifi", 1024 * 2, &wifi, 5,
         &wifi_connection_handle);
 
-    xTaskCreate(mqtt_connection, "Mqtt", 1024 * 2, NULL, 5,
+    xTaskCreate(&mqtt_connection, "Mqtt", 1024 * 2, NULL, 5,
         &mqtt_connection_handle);
 
-    xTaskCreate(get_temperature, "Temperature", 1024 * 2, &param, 5,
+    xTaskCreate(&get_temperature, "Temperature", 1024 * 2, &param, 5,
         &get_temperature_handle);
 
     // Debug tasks
     // xTaskCreate(checkStackUsage, "CheckStack", 1024 * 2, NULL, 5, NULL);
-    xTaskCreate(heapMonitor, "HeapMonitor", 1024 * 2, NULL, 5, NULL);
+    xTaskCreate(&heapMonitor, "HeapMonitor", 1024 * 2, NULL, 5, NULL);
 
     // ======================= FreeRTOS specific =============================
     for (;;) {
