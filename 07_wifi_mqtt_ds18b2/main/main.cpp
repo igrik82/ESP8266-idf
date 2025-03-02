@@ -23,6 +23,7 @@ typedef struct {
 
 EventGroupHandle_t common_event_group = xEventGroupCreate();
 QueueHandle_t temperature_queue = xQueueCreate(5, sizeof(SensorData_t));
+QueueHandle_t duty_percent_queue = xQueueCreate(5, sizeof(uint8_t));
 
 uint8_t _wifi_connect_bit { BIT0 };
 uint8_t _wifi_disconnect_bit { BIT1 };
@@ -43,8 +44,8 @@ void wifi_connection(void* pvParameter)
 TaskHandle_t mqtt_connection_handle = NULL;
 void mqtt_connection(void* pvParameter)
 {
+    Mqtt_NS::Mqtt mqtt(temperature_queue);
     for (;;) {
-        Mqtt_NS::Mqtt mqtt(temperature_queue);
         mqtt.start();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }

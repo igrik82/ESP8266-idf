@@ -105,7 +105,7 @@ void Mqtt::start()
         xEventGroupClearBits(common_event_group, _wifi_got_ip);
 
         // Publish sensor data
-        SensorData_t sensor_data = {};
+        SensorData_t sensor_data {};
         for (;;) {
             if (xQueueReceive(*_sensor_queue, &sensor_data, portMAX_DELAY) == pdTRUE) {
 
