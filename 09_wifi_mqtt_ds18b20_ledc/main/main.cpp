@@ -12,9 +12,10 @@
 #include <cstddef>
 #include <cstdio>
 
-#define SENSOR_COUNT 2
+constexpr uint8_t SENSOR_COUNT { 2 };
+constexpr uint16_t STACK_TASK_SIZE { 3072 }; // 1024 * 3
 
-// ============================ Global variables ==============================
+// ============================ Global Variables ==============================
 
 // Structures for sensor
 typedef struct {
@@ -23,22 +24,22 @@ typedef struct {
     uint8_t (*sensor_addr)[8];
 } Temp_param;
 
+// TODO: Make class Event Manager
 EventGroupHandle_t common_event_group = xEventGroupCreate();
-
-QueueHandle_t temperature_queue_PWM = xQueueCreate(5, sizeof(SensorData_t));
-QueueHandle_t duty_percent_queue = xQueueCreate(5, sizeof(uint8_t));
-QueueHandle_t temperature_queue = xQueueCreate(5, sizeof(SensorData_t));
-
 uint8_t _wifi_connect_bit { BIT0 };
 uint8_t _wifi_disconnect_bit { BIT1 };
 uint8_t _wifi_got_ip { BIT2 };
 uint8_t _wifi_lost_ip { BIT3 };
 
-// ===================== Functions ===========================================
+QueueHandle_t temperature_queue_PWM = xQueueCreate(5, sizeof(SensorData_t));
+QueueHandle_t duty_percent_queue = xQueueCreate(5, sizeof(uint8_t));
+QueueHandle_t temperature_queue = xQueueCreate(5, sizeof(SensorData_t));
+
+// ===================== FreeRTOS Tasks =======================================
 TaskHandle_t wifi_connection_handle = NULL;
 void wifi_connection(void* pvParameter)
 {
-    Wifi_NS::Wifi* wifi_obj = (Wifi_NS::Wifi*)pvParameter;
+    Wifi_NS::Wifi* wifi_obj = static_cast<Wifi_NS::Wifi*>(pvParameter);
     for (;;) {
         wifi_obj->start();
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -57,10 +58,9 @@ void mqtt_connection(void* pvParameter)
 
 // Get temperature task
 TaskHandle_t get_temperature_handle = NULL;
-
 void get_temperature(void* pvParameter)
 {
-    Temp_param* temp_param = (Temp_param*)pvParameter;
+    Temp_param* temp_param = static_cast<Temp_param*>(pvParameter);
     SensorData_t sensor_data = {};
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(2000));
@@ -71,8 +71,12 @@ void get_temperature(void* pvParameter)
 
             ESP_LOGI("DS18B20", "Temperature %d: %.2f", i, sensor_data.temperature);
 
-            xQueueSend(temperature_queue, &sensor_data, portMAX_DELAY);
-            xQueueSend(temperature_queue_PWM, &sensor_data, portMAX_DELAY);
+            if (xQueueSend(temperature_queue, &sensor_data, portMAX_DELAY) != pdPASS) {
+                ESP_LOGE("DS18B20", "Failed to send data to queue from main.cpp");
+            }
+            if (xQueueSend(temperature_queue_PWM, &sensor_data, portMAX_DELAY) != pdPASS) {
+                ESP_LOGE("DS18B20", "Failed to send data to queue from main.cpp");
+            }
         }
     }
 }
@@ -82,8 +86,9 @@ void checkStackUsage(void* pvParameter)
 {
     {
         for (;;) {
-            UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(wifi_connection_handle);
-            printf("High Water Mark:%u\n", highWaterMark);
+            UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(get_temperature_handle);
+            // Warning for visual difference
+            ESP_LOGW("StackMonitor", "High Water Mark:%u", highWaterMark);
             vTaskDelay(pdMS_TO_TICKS(5000));
         }
     }
@@ -93,28 +98,30 @@ void printHeapInfo()
     // Print heap info
     uint32_t freeHeap = esp_get_free_heap_size();
     uint32_t freeHeapMin = esp_get_minimum_free_heap_size();
-    printf("Free Heap Size: %u bytes\n", freeHeap);
-    printf("Minimal Heap Size: %u bytes\n", freeHeapMin);
+    // Warning for visual difference
+    ESP_LOGW("HeapMonitor", "Free Heap Size: %u bytes", freeHeap);
+    ESP_LOGW("HeapMonitor", "Minimal Heap Size: %u bytes", freeHeapMin);
 }
 
 void heapMonitor(void* pvParameter)
 {
-    while (1) {
+    for (;;) {
         printHeapInfo();
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
 // ============================================================================
-// ============================= Main cycle ===================================
+// ============================= Main Program =================================
 // ============================================================================
 
 extern "C" void app_main(void)
 {
     // =========================== Logging ====================================
     // Set log level in this scope
-    // esp_log_level_set("*", ESP_LOG_INFO);
-    esp_log_level_set("*", ESP_LOG_ERROR);
+    esp_log_level_set("*", ESP_LOG_INFO);
+    // esp_log_level_set("*", ESP_LOG_WARN);
+    // esp_log_level_set("*", ESP_LOG_ERROR);
 
     // ========================= Initialization ===============================
 
@@ -141,27 +148,30 @@ extern "C" void app_main(void)
 
     Temp_param param = { onewire_pin, ds18b20_address };
 
-    // ======================= Tasks looping ==================================
-    xTaskCreate(&wifi_connection, "Wifi", 1024 * 2, &wifi, 5,
+    // ======================= Tasks Looping ==================================
+    xTaskCreate(&wifi_connection, "Wifi", STACK_TASK_SIZE, &wifi, 5,
         &wifi_connection_handle);
 
-    xTaskCreate(&mqtt_connection, "Mqtt", 1024 * 2, NULL, 5,
+    xTaskCreate(&mqtt_connection, "Mqtt", STACK_TASK_SIZE, NULL, 5,
         &mqtt_connection_handle);
 
-    xTaskCreate(&get_temperature, "Temperature", 1024 * 2, &param, 5,
+    xTaskCreate(&get_temperature, "Temperature", STACK_TASK_SIZE, &param, 5,
         &get_temperature_handle);
 
     // Debug tasks
-    // xTaskCreate(checkStackUsage, "CheckStack", 1024 * 2, NULL, 5, NULL);
-    xTaskCreate(&heapMonitor, "HeapMonitor", 1024 * 2, NULL, 5, NULL);
+    // xTaskCreate(checkStackUsage, "CheckStack", STACK_TASK_SIZE, NULL, 5, NULL);
+    xTaskCreate(&heapMonitor, "HeapMonitor", STACK_TASK_SIZE, NULL, 5, NULL);
 
-    // Fan control. NOTE: Keep this task at the end.
+    // Fan control.
+    // NOTE: Keep this after all other tasks, because it not working
+    // in FreeRTOS task.
     Fan_NS::FanPWM fan_pwm(13, &temperature_queue_PWM, &duty_percent_queue);
     fan_pwm.start();
-    // ======================= FreeRTOS specific =============================
+
+    // ======================= FreeRTOS Specific =============================
+    // BUG: Without this, FreeRTOS tasks will crash
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-
     vTaskStartScheduler();
 }

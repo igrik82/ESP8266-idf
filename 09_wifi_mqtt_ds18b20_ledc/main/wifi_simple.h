@@ -48,7 +48,7 @@ private:
         ERROR
     };
 
-    const gpio_num_t _led { (gpio_num_t)CONFIG_LED_GPIO };
+    const gpio_num_t _led { static_cast<gpio_num_t>(CONFIG_LED_GPIO) };
 
 // Custom mac addr
 #if CONFIG_CUSTOM_MAC

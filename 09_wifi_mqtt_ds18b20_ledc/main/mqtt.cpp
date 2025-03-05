@@ -73,8 +73,8 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_PUBLISHED:
         break;
     case MQTT_EVENT_DATA:
-        printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        printf("DATA=%.*s\r\n", event->data_len, event->data);
+        // printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
+        // printf("DATA=%.*s\r\n", event->data_len, event->data);
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
@@ -131,6 +131,8 @@ void Mqtt::start()
 
                 ESP_LOGI(TAG, "Temperature from MQTT: %s %s", msg, topic);
                 esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
+            } else {
+                ESP_LOGE(TAG, "Failed to receive data from sensor queue");
             }
 
         } else if (activate_handle == *_percent_queue) {
@@ -144,6 +146,8 @@ void Mqtt::start()
 
                 ESP_LOGI(TAG, "Percent from MQTT: %s %s", msg, topic);
                 esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
+            } else {
+                ESP_LOGE(TAG, "Failed to receive data from percent queue");
             }
         }
     }

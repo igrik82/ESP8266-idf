@@ -79,7 +79,7 @@ void FanPWM::start(void)
                 ESP_LOGI(TAG, "Sensor %d temperature %f", sensor_data.sensor_id,
                     sensor_data.temperature);
             } else {
-                ESP_LOGE(TAG, "Queue is empty");
+                ESP_LOGE(TAG, "Failed to receive sensor data.");
             }
         }
         // Find min, max and sum
@@ -109,7 +109,9 @@ void FanPWM::start(void)
 
         // Send % speed
         uint8_t persent = (uint8_t)((_duty * 100) / _max_duty);
-        xQueueSend(*_duty_percent_queue, &persent, portMAX_DELAY);
+        if (xQueueSend(*_duty_percent_queue, &persent, portMAX_DELAY) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to send duty percent.");
+        }
     }
 }
 
