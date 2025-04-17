@@ -7,13 +7,11 @@
 #include "freertos/queue.h"
 #include "gpio.h" // IWYU pragma: keep
 #include "mqtt.h"
-#include "projdefs.h"
 #include "wifi_simple.h"
-#include <cstddef>
 #include <cstdio>
 
 constexpr uint8_t SENSOR_COUNT { 2 };
-constexpr uint16_t STACK_TASK_SIZE { 3072 }; // 1024 * 3
+constexpr uint16_t STACK_TASK_SIZE { 4096 }; // 1024 * 4
 
 // ============================ Global Variables ==============================
 
@@ -88,7 +86,7 @@ void checkStackUsage(void* pvParameter)
         for (;;) {
             UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(get_temperature_handle);
             // Warning for visual difference
-            ESP_LOGW("StackMonitor", "High Water Mark:%u", highWaterMark);
+            ESP_LOGE("StackMonitor", "High Water Mark:%u", highWaterMark);
             vTaskDelay(pdMS_TO_TICKS(5000));
         }
     }
@@ -99,8 +97,8 @@ void printHeapInfo()
     uint32_t freeHeap = esp_get_free_heap_size();
     uint32_t freeHeapMin = esp_get_minimum_free_heap_size();
     // Warning for visual difference
-    ESP_LOGW("HeapMonitor", "Free Heap Size: %u bytes", freeHeap);
-    ESP_LOGW("HeapMonitor", "Minimal Heap Size: %u bytes", freeHeapMin);
+    ESP_LOGE("HeapMonitor", "Free Heap Size: %u bytes", freeHeap);
+    ESP_LOGE("HeapMonitor", "Minimal Heap Size: %u bytes", freeHeapMin);
 }
 
 void heapMonitor(void* pvParameter)
@@ -149,6 +147,7 @@ extern "C" void app_main(void)
     Temp_param param = { onewire_pin, ds18b20_address };
 
     // ======================= Tasks Looping ==================================
+
     xTaskCreate(&wifi_connection, "Wifi", STACK_TASK_SIZE, &wifi, 5,
         &wifi_connection_handle);
 
@@ -160,7 +159,7 @@ extern "C" void app_main(void)
 
     // Debug tasks
     // xTaskCreate(checkStackUsage, "CheckStack", STACK_TASK_SIZE, NULL, 5, NULL);
-    xTaskCreate(&heapMonitor, "HeapMonitor", STACK_TASK_SIZE, NULL, 5, NULL);
+    xTaskCreate(&heapMonitor, "HeapMonitor", 2048, NULL, 5, NULL);
 
     // Fan control.
     // NOTE: Keep this after all other tasks, because it not working
