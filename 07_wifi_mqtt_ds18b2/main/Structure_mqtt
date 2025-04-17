@@ -1,0 +1,65 @@
+homeassistant/sensor/HDDdock_temp_left/config
+{
+  "device": {
+    "name": "HDD Station",
+    "model": "HDD Station",
+    "ids": "DockHDD24D7EB118208",
+    "mf": "Игорь Смоляков",
+    "sw": "2.00",
+    "hw": "1.01",
+    "cu": "http://192.168.88.13"
+  },
+  "name": "Left HDD",
+  "deve_cla": "temperature",
+  "stat_t": "homeassistant/sensor/HDDdock_temp_left/temp_left/state",
+  "uniq_id": "DockHDD_temp_left",
+  "icon": "mdi:harddisk",
+  "unit_of_meas": "°C"
+ }
+
+homeassistant/sensor/HDDdock_temp_left/temp_left/state
+21.5
+
+homeassistant/sensor/HDDdock_temp_right/config
+{
+  "device": {
+    "name": "HDD Station",
+    "model": "HDD Station",
+    "ids": "DockHDD24D7EB118208",
+    "mf": "Игорь Смоляков",
+    "sw": "2.00",
+    "hw": "1.01",
+    "cu": "http://192.168.88.13"
+  },
+  "name": "Right HDD",
+  "deve_cla": "temperature",
+  "stat_t": "homeassistant/sensor/HDDdock_temp_right/temp_right/state",
+  "uniq_id": "DockHDD_temp_right",
+  "icon": "mdi:harddisk",
+  "unit_of_meas": "°C"
+ }
+
+homeassistant/sensor/HDDdock_temp_right/temp_right/state
+22.5
+
+homeassistant/sensor/HDDdock_fan/config
+{
+  "device": {
+    "name": "HDD Station",
+    "model": "HDD Station",
+    "ids": "DockHDD24D7EB118208",
+    "mf": "Игорь Смоляков",
+    "sw": "2.00",
+    "hw": "1.01",
+    "cu": "http://192.168.88.13"
+  },
+  "name": "Fan HDD",
+  "deve_cla": "power_factor",
+  "stat_t": "homeassistant/sensor/HDDdock_fan/fan/state",
+  "uniq_id": "DockHDD_fan",
+  "icon": "mdi:fan",
+  "unit_of_meas": "%"
+ }
+
+homeassistant/sensor/HDDdock_fan/fan/state
+80
