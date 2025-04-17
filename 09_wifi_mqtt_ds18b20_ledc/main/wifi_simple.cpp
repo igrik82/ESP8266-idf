@@ -136,6 +136,7 @@ void Wifi::_ip_event_handler(void* arg, esp_event_base_t event_base,
 
 esp_err_t Wifi::start(void)
 {
+    esp_err_t status { ESP_OK };
     if (_state == state_w::NOT_INITIALISED) {
 
         ESP_ERROR_CHECK(esp_wifi_start());
@@ -163,7 +164,6 @@ esp_err_t Wifi::start(void)
         }
     }
 
-    // If we get here we have an error
-    return ESP_FAIL;
+    return status;
 }
 } // namespace Wifi_NS
