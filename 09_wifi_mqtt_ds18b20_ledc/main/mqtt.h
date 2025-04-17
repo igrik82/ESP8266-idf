@@ -1,19 +1,33 @@
 #pragma once
 
+// BUG: In mdns.h ip6_addr_t not defined
+// just silence it
+#include <cstdint>
+// typedef struct ip6_addr {
+//     uint32_t addr[4]; // IPv6 = 128 бит = 4 × uint32_t
+// } ip6_addr_t;
+
 #include "esp_event.h"
 #include "esp_log.h" // IWYU pragma: keep
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "mdns.h" // IWYU pragma: keep
 #include "mqtt_client.h"
 #include "nvs_flash.h" // IWYU pragma: keep
 #include "secrets.h" // IWYU pragma: keep
-#include <cstdint>
+//---
 
 typedef struct {
     uint8_t sensor_id; // ID sensor
     float temperature; // Temperature
 } SensorData_t;
+typedef struct {
+    char hostname[60]; // hostname
+    char ip[16]; // IPv4 (example "192.168.111.222")
+    char full_proto[25]; // mqtt://192.168.111.222
+    uint16_t port; // Port MQTT (1883, 8883 и т.д.)
+} MdnsMqttServer_t;
 
 namespace Mqtt_NS {
 
@@ -57,9 +71,12 @@ private:
     QueueHandle_t* _sensor_queue;
     QueueHandle_t* _percent_queue;
 
+    MdnsMqttServer_t _mdns_mqtt_server;
+
 public:
     Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue);
     ~Mqtt(void) = default;
+    bool find_mqtt_server(MdnsMqttServer_t& mqtt_server);
     void start(void);
     constexpr static const char* TAG = "MQTT";
 };

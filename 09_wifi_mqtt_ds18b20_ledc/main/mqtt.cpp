@@ -1,7 +1,5 @@
 #include "mqtt.h"
-#include "esp_event.h"
-#include "mqtt_client.h"
-#include "portmacro.h"
+#include <cstdio>
 
 // External variables from main
 extern EventGroupHandle_t common_event_group;
@@ -16,6 +14,47 @@ namespace Mqtt_NS {
 esp_mqtt_client_config_t Mqtt::mqtt_cfg {};
 Mqtt::state_m Mqtt::_state { Mqtt::state_m::NOT_INITIALISED };
 
+bool Mqtt::find_mqtt_server(MdnsMqttServer_t& mqtt_server)
+{
+
+    ESP_ERROR_CHECK(mdns_init());
+
+    ESP_LOGI("MDNS", "Querying for MQTT servers...");
+    mdns_result_t* results = NULL;
+    esp_err_t err = mdns_query_ptr("_mqtt", "_tcp", 3000, 20, &results);
+
+    if (err != ESP_OK || results == NULL) {
+        ESP_LOGE("MDNS", "Failed to find MQTT servers: %s", esp_err_to_name(err));
+        mdns_query_results_free(results);
+        return false;
+    }
+
+    if (results->instance_name) {
+        printf("  PTR : %s\n", results->instance_name);
+    }
+    if (results->hostname) {
+        printf("  SRV : %s.local:%u\n", results->hostname, results->port);
+    }
+
+    snprintf(mqtt_server.hostname, sizeof(mqtt_server.hostname), "%s.local",
+        results->hostname);
+    ESP_LOGI("MDNS", "Found MQTT server: %s", mqtt_server.hostname);
+
+    snprintf(mqtt_server.ip, sizeof(mqtt_server.ip), "%s",
+        ip4addr_ntoa(&(results->addr->addr.u_addr.ip4)));
+    ESP_LOGI("MDNS", "Found MQTT server IP: %s", mqtt_server.ip);
+
+    snprintf(mqtt_server.full_proto, sizeof(mqtt_server.full_proto), "mqtt://%s",
+        mqtt_server.ip); // "mqtt://192.168.111.222"
+    // printf("%s - %d", mqtt_server.full_proto, sizeof(mqtt_server.full_proto));
+
+    mqtt_server.port = results->port;
+    ESP_LOGI("MDNS", "Found MQTT server port: %d", mqtt_server.port);
+
+    mdns_query_results_free(results);
+    return true;
+}
+
 Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
 {
     // Queue from sensor
@@ -28,20 +67,28 @@ Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
 
     // Client initialisation
     if (_state == state_m::NOT_INITIALISED) {
-        mqtt_cfg.uri = CONFIG_BROKER_URL;
-        mqtt_cfg.port = CONFIG_BROKER_PORT;
-        mqtt_cfg.client_id = CONFIG_CLIENT_ID;
-        mqtt_cfg.username = MQTT_USER;
-        mqtt_cfg.password = MQTT_PASSWORD;
-        mqtt_cfg.keepalive = CONFIG_MQTT_KEEP_ALIVE;
-        mqtt_cfg.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
-        ESP_LOGI(TAG, "MQTT client init");
-        client = esp_mqtt_client_init(&mqtt_cfg);
-        esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler,
-            NULL);
-
-        _state = state_m::INITIALISED;
+        // wait for WI-FI connection and IP
+        xEventGroupWaitBits(common_event_group, _wifi_got_ip, pdFALSE, pdFALSE,
+            portMAX_DELAY);
+        if (!find_mqtt_server(_mdns_mqtt_server)) {
+            mqtt_cfg.uri = CONFIG_BROKER_URL;
+            mqtt_cfg.port = CONFIG_BROKER_PORT;
+        } else {
+            mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
+            mqtt_cfg.port = _mdns_mqtt_server.port;
+        }
     }
+    mqtt_cfg.client_id = CONFIG_CLIENT_ID;
+    mqtt_cfg.username = MQTT_USER;
+    mqtt_cfg.password = MQTT_PASSWORD;
+    mqtt_cfg.keepalive = CONFIG_MQTT_KEEP_ALIVE;
+    mqtt_cfg.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
+    ESP_LOGI(TAG, "MQTT client init");
+    client = esp_mqtt_client_init(&mqtt_cfg);
+    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler,
+        NULL);
+
+    _state = state_m::INITIALISED;
 }
 
 // Evens callback
