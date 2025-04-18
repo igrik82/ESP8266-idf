@@ -64,6 +64,7 @@ void get_temperature(void* pvParameter)
         vTaskDelay(pdMS_TO_TICKS(2000));
         for (uint8_t i = 0; i < SENSOR_COUNT; i++) {
             sensor_data.sensor_id = i;
+            vTaskDelay(pdMS_TO_TICKS(2000));
             temp_param->onewire_pin.get_temp(temp_param->sensor_addr[i],
                 sensor_data.temperature);
 
@@ -117,9 +118,9 @@ extern "C" void app_main(void)
 {
     // =========================== Logging ====================================
     // Set log level in this scope
-    esp_log_level_set("*", ESP_LOG_INFO);
+    // esp_log_level_set("*", ESP_LOG_INFO);
     // esp_log_level_set("*", ESP_LOG_WARN);
-    // esp_log_level_set("*", ESP_LOG_ERROR);
+    esp_log_level_set("*", ESP_LOG_ERROR);
 
     // ========================= Initialization ===============================
 
