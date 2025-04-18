@@ -102,8 +102,6 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
             mqtt_cfg.port);
         ESP_LOGI(TAG, "Login - \"%s\" password - \"%s\"", mqtt_cfg.username,
             mqtt_cfg.password);
-        // msg_id = esp_mqtt_client_publish(client, "/topic/qos1", "data_3", 0, 1,
-        // 0);
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "Disconnected from MQTT broker at %s:%d", mqtt_cfg.uri,
@@ -160,6 +158,56 @@ void Mqtt::start()
     SensorData_t sensor_data {};
     uint8_t percent {};
 
+    const std::string device = R"({
+  "device": {
+    "name": "HDD Station",
+    "model": "HDD Station",
+    "ids": "DockHDD24D7EB118208",
+    "mf": "Игорь Смоляков",
+    "sw": "2.00",
+    "hw": "1.01",
+    "cu": "http://192.168.88.13"
+  },)";
+
+    // Temperature left HDD
+    const std::string topic_left = R"(homeassistant/sensor/HDDdock_temp_left/config)";
+    const std::string msg_left = R"(
+  "name": "Left HDD",
+  "deve_cla": "temperature",
+  "stat_t": "homeassistant/sensor/HDDdock/temp_0/state",
+  "uniq_id": "DockHDD_temp_left",
+  "icon": "mdi:harddisk",
+  "unit_of_meas": "°C"
+})";
+    esp_mqtt_client_publish(client, topic_left.c_str(),
+        (device + msg_left).c_str(), 0, 1, 1);
+
+    // Temperature right HDD
+    const std::string topic_right = R"(homeassistant/sensor/HDDdock_temp_right/config)";
+    const std::string msg_right = R"(
+  "name": "Right HDD",
+  "deve_cla": "temperature",
+  "stat_t": "homeassistant/sensor/HDDdock/temp_1/state",
+  "uniq_id": "DockHDD_temp_right",
+  "icon": "mdi:harddisk",
+  "unit_of_meas": "°C"
+ })";
+    esp_mqtt_client_publish(client, topic_right.c_str(),
+        (device + msg_right).c_str(), 0, 1, 1);
+
+    // Fan power
+    const std::string topic_fan = R"(homeassistant/sensor/HDDdock_fan/config)";
+    const std::string msg_fan = R"(
+    "name": "Fan HDD",
+  "deve_cla": "power_factor",
+  "stat_t": "homeassistant/sensor/HDDdock/fan/state",
+  "uniq_id": "DockHDD_fan",
+  "icon": "mdi:fan",
+  "unit_of_meas": "%"
+ })";
+    esp_mqtt_client_publish(client, topic_fan.c_str(), (device + msg_fan).c_str(),
+        0, 1, 1);
+
     for (;;) {
         QueueSetMemberHandle_t activate_handle = xQueueSelectFromSet(_queue_set, portMAX_DELAY);
 
@@ -174,7 +222,9 @@ void Mqtt::start()
                 snprintf(msg, sizeof(msg), "%.2f", sensor_data.temperature);
 
                 char topic[50]; // buffer for topic
-                snprintf(topic, sizeof(topic), "/topic/%d", sensor_data.sensor_id);
+                snprintf(topic, sizeof(topic),
+                    "homeassistant/sensor/HDDdock/temp_%d/state",
+                    sensor_data.sensor_id);
 
                 ESP_LOGI(TAG, "Temperature from MQTT: %s %s", msg, topic);
                 esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
@@ -189,7 +239,8 @@ void Mqtt::start()
                 snprintf(msg, sizeof(msg), "%d", percent);
 
                 char topic[50]; // buffer for topic
-                snprintf(topic, sizeof(topic), "/topic/pecent");
+                snprintf(topic, sizeof(topic),
+                    "homeassistant/sensor/HDDdock/fan/state");
 
                 ESP_LOGI(TAG, "Percent from MQTT: %s %s", msg, topic);
                 esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);

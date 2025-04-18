@@ -16,7 +16,7 @@
 #include "mqtt_client.h"
 #include "nvs_flash.h" // IWYU pragma: keep
 #include "secrets.h" // IWYU pragma: keep
-//---
+#include <string> // TWYU pragma: keep
 
 typedef struct {
     uint8_t sensor_id; // ID sensor
