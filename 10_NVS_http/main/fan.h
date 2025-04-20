@@ -12,13 +12,13 @@ constexpr uint8_t MIN_TEMP_HDD { 25 };
 constexpr uint8_t MAX_TEMP_HDD { 40 };
 constexpr uint32_t LOW_SPEED_MODE_TIMER = 8000;
 
+static uint32_t _freq_hz { 1000 }; // LOW MODE - 100 Hz - 1000 Hz
 class FanPWM {
 
 protected:
     ledc_mode_t _speed_mode { LEDC_LOW_SPEED_MODE };
     ledc_timer_bit_t _duty_resolution { LEDC_TIMER_10_BIT };
     ledc_timer_t _timer_num { LEDC_TIMER_0 };
-    uint32_t _freq_hz { 1000 }; // LOW MODE - 100 Hz - 1000 Hz
     int _gpio_num { 13 }; // GPIO_NUM_13:  gpio_num = 13
     ledc_channel_t _channel { LEDC_CHANNEL_0 }; // LEDC channel (0 - 7)
     int _hpoint { 0 };

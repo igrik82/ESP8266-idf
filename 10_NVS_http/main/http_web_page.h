@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fan.h"
 #include <string>
 
 const std::string web_page = R"(
@@ -31,27 +32,18 @@ setInterval(fetchTemperatures,3000);fetchTemperatures();</script>
 <h2 class=inner_title>Fan</h2>
 <div class=config-item>
 <label>Min HDD temp:</label>
-<input type=number name=min_temp placeholder=%d />
+<input type=number name=min_temp placeholder=)"
+    + std::to_string(Fan_NS::MIN_TEMP_HDD) + R"( />
 </div>
 <div class=config-item>
 <label>Max HDD temp:</label>
-<input type=number name=max_temp placeholder=%d />
+<input type=number name=max_temp placeholder=)"
+    + std::to_string(Fan_NS::MAX_TEMP_HDD) + R"( />
 </div>
 <div class=config-item>
 <label>Frequency:</label>
-<input type=number name=fan_freq placeholder=%d />
-</div>
-<button type=submit>Save</button>
-</form>
-<form class=section onsubmit="event.preventDefault();saveSettings(this,'/save-sensor')\"">
-<h2 class=inner_title>Sensors temperature correction</h2>
-<div class=config-item>
-<label>Sensor 0:</label>
-<input type=number name=sens_corr_0 placeholder=%f />
-</div>
-<div class=config-item>
-<label>Sensor 1:</label>
-<input type=number name=sens_corr_1 placeholder=%f />
+<input type=number name=fan_freq placeholder=)"
+    + std::to_string(Fan_NS::_freq_hz) + R"( />
 </div>
 <button type=submit>Save</button>
 </form>

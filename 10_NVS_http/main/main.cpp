@@ -1,4 +1,5 @@
 #include "FreeRTOS.h" // IWYU pragma: keep
+#include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -8,8 +9,11 @@
 #include "gpio.h" // IWYU pragma: keep
 #include "http.h" // IWYU pragma: keep
 #include "mqtt.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 #include "wifi_simple.h"
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 
 constexpr uint8_t SENSOR_COUNT { 2 };
@@ -20,7 +24,6 @@ constexpr uint16_t STACK_TASK_SIZE { 4096 }; // 1024 * 4
 // Structures for sensor
 typedef struct {
     OneWire::DS18B20& onewire_pin;
-    // float& temp;
     uint8_t (*sensor_addr)[8];
 } Temp_param;
 
