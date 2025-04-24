@@ -1,0 +1,3 @@
+[submodule "12_with_spiffs/FileToCArray"]
+	path = 12_with_spiffs/FileToCArray
+	url = https://github.com/notisrac/FileToCArray.git
