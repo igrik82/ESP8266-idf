@@ -1,9 +1,8 @@
 #include "http.h"
-#include "esp_http_server.h"
 
 namespace Http_NS {
 
-httpd_handle_t* HttpServer::_server = NULL;
+httpd_handle_t HttpServer::_server = NULL;
 
 HttpServer::HttpServer(void)
 {
@@ -37,17 +36,9 @@ HttpServer::HttpServer(void)
 
     // Register event handler for starting http server
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-        &_connect_handler, &_server));
-}
-
-void HttpServer::_connect_handler(void* arg, esp_event_base_t event_base,
-    int32_t event_id, void* event_data)
-{
-    httpd_handle_t* _server = static_cast<httpd_handle_t*>(arg);
-    if (*_server == NULL) {
-        ESP_LOGI(TAG, "Starting webserver");
-        *_server = HttpServer::start_webserver();
-    }
+        &_connect_handler, this));
+    ESP_ERROR_CHECK(esp_event_handler_register(
+        WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &_disconnect_handler, this));
 }
 
 /* An HTTP GET handler */
@@ -105,6 +96,14 @@ httpd_uri_t root_dir = { .uri = "/favicon.ico",
     .handler = root_get_handler,
     .user_ctx = NULL };
 
+void HttpServer::_connect_handler(void* arg, esp_event_base_t event_base,
+    int32_t event_id, void* event_data)
+{
+    if (HttpServer::_server == NULL) {
+        ESP_LOGI(TAG, "Starting webserver");
+        HttpServer::_server = HttpServer::start_webserver();
+    }
+}
 httpd_handle_t HttpServer::start_webserver(void)
 {
     httpd_handle_t server = NULL;
@@ -126,4 +125,27 @@ httpd_handle_t HttpServer::start_webserver(void)
     return NULL;
 }
 
+void HttpServer::_disconnect_handler(void* arg, esp_event_base_t event_base,
+    int32_t event_id, void* event_data)
+{
+    if (HttpServer::_server) {
+        ESP_LOGI(TAG, "Stoping webserver");
+        HttpServer::_server = stop_webserver(HttpServer::_server);
+    }
+}
+
+httpd_handle_t HttpServer::stop_webserver(httpd_handle_t server)
+{
+    if (server == NULL) {
+        return NULL;
+    }
+    esp_err_t ret = httpd_stop(server);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to stop server: %s", esp_err_to_name(ret));
+        return server; // Return the server handle if stopping failed
+    }
+
+    ESP_LOGI(TAG, "Server stopped successfully");
+    return NULL; // Return NULL if stopping was successful
+}
 } // namespace Http_NS
