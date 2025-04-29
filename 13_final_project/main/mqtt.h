@@ -32,12 +32,12 @@ private:
         // READY_TO_CONNECT,
         // CONNECTING,
         // WAITING_FOR_IP,
-        // CONNECTED,
-        // DISCONNECTED,
+        CONNECTED,
+        DISCONNECTED,
         // ERROR
     };
     static state_m _state;
-    esp_mqtt_client_handle_t client;
+    esp_mqtt_client_handle_t client = NULL;
     static esp_mqtt_client_config_t mqtt_cfg;
     /*
         wifi 0 bit - connected
@@ -56,21 +56,32 @@ private:
     const uint8_t _mqtt_subscribed { BIT7 };
     const uint16_t _mqtt_unsubscribed { BIT8 };
 
-    static void mqtt_event_handler(void* handler_args, esp_event_base_t base,
+    // Handle WI-FI event
+    static void _connect_handler(void* arg, esp_event_base_t event_base,
+        int32_t event_id, void* event_data);
+    static void _disconnect_handler(void* arg, esp_event_base_t event_base,
+        int32_t event_id, void* event_data);
+
+    // Handle MQTT event
+    static void mqtt_event_handler(void* arg, esp_event_base_t event_base,
         int32_t event_id, void* event_data);
     static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event);
 
-    QueueSetHandle_t _queue_set {};
+    QueueSetHandle_t _queue_set = nullptr;
     QueueHandle_t* _sensor_queue;
     QueueHandle_t* _percent_queue;
 
     MdnsMqttServer_t _mdns_mqtt_server;
+    state_m _mdns_interface_state { state_m::NOT_INITIALISED };
 
 public:
     Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue);
     ~Mqtt(void) = default;
     bool find_mqtt_server(MdnsMqttServer_t& mqtt_server);
-    void start(void);
+    void init(void);
+    void publish(void);
+    void stop(esp_mqtt_client_handle_t client);
+
     constexpr static const char* TAG = "MQTT";
     constexpr static const char* TAG_mDNS = "mDNS";
 };

@@ -54,7 +54,7 @@ void mqtt_connection(void* pvParameter)
 {
     Mqtt_NS::Mqtt mqtt(temperature_queue, duty_percent_queue);
     for (;;) {
-        mqtt.start();
+        // mqtt.init();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }

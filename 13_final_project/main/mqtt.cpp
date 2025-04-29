@@ -1,4 +1,10 @@
 #include "mqtt.h"
+#include "esp_err.h"
+#include "esp_event.h"
+#include "mdns.h"
+#include "mqtt_client.h"
+#include <cstddef>
+#include <cstdint>
 
 // External variables from main
 extern EventGroupHandle_t common_event_group;
@@ -13,18 +19,54 @@ namespace Mqtt_NS {
 esp_mqtt_client_config_t Mqtt::mqtt_cfg {};
 Mqtt::state_m Mqtt::_state { Mqtt::state_m::NOT_INITIALISED };
 
+// Constructor
+Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
+    : _sensor_queue(&temperature_queue)
+    , _percent_queue(&percent_queue)
+    , _mdns_mqtt_server({})
+{
+    // Register event handlers
+    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT,
+        WIFI_EVENT_STA_DISCONNECTED,
+        &Mqtt::_disconnect_handler, this));
+    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+        &Mqtt::_connect_handler, this));
+}
+
+void Mqtt::_disconnect_handler(void* arg, esp_event_base_t event_base,
+    int32_t event_id, void* event_data)
+{
+    Mqtt* self = static_cast<Mqtt*>(arg);
+    if (self->client == NULL) {
+        return;
+    }
+    self->stop(self->client);
+}
+
+void Mqtt::stop(esp_mqtt_client_handle_t client)
+{
+    ESP_LOGI(TAG, "Stoping mqtt client...");
+    esp_mqtt_client_destroy(client);
+    Mqtt::client = NULL;
+    _state = state_m::NOT_INITIALISED;
+    if (_queue_set) {
+        ESP_LOGI(TAG, "Deleting queue set from mqtt client");
+        vQueueDelete(_queue_set);
+        _queue_set = nullptr;
+    }
+}
+
 bool Mqtt::find_mqtt_server(MdnsMqttServer_t& mqtt_server)
 {
 
+    // Initialize mDNS
     ESP_ERROR_CHECK(mdns_init());
-
-    ESP_LOGI("TAG_mDNS", "Querying for MQTT servers...");
+    ESP_LOGI(TAG_mDNS, "Querying for MQTT servers...");
     mdns_result_t* results = NULL;
     esp_err_t err = mdns_query_ptr("_mqtt", "_tcp", 3000, 20, &results);
 
     if (err != ESP_OK || results == NULL) {
-        ESP_LOGE("TAG_mDNS", "Failed to find MQTT servers: %s",
-            esp_err_to_name(err));
+        ESP_LOGW(TAG_mDNS, "Failed to find MQTT servers");
         mdns_query_results_free(results);
         return false;
     }
@@ -38,64 +80,95 @@ bool Mqtt::find_mqtt_server(MdnsMqttServer_t& mqtt_server)
 
     snprintf(mqtt_server.hostname, sizeof(mqtt_server.hostname), "%s.local",
         results->hostname);
-    ESP_LOGI("TAG_mDNS", "Found MQTT server: %s", mqtt_server.hostname);
+    ESP_LOGI(TAG_mDNS, "Found MQTT server: %s", mqtt_server.hostname);
 
     snprintf(mqtt_server.ip, sizeof(mqtt_server.ip), "%s",
         ip4addr_ntoa(&(results->addr->addr.u_addr.ip4)));
-    ESP_LOGI("TAG_mDNS", "Found MQTT server IP: %s", mqtt_server.ip);
+    ESP_LOGI(TAG_mDNS, "Found MQTT server IP: %s", mqtt_server.ip);
 
     snprintf(mqtt_server.full_proto, sizeof(mqtt_server.full_proto), "mqtt://%s",
         mqtt_server.ip); // "mqtt://192.168.111.222"
-    // printf("%s - %d", mqtt_server.full_proto, sizeof(mqtt_server.full_proto));
 
     mqtt_server.port = results->port;
-    ESP_LOGI("TAG_mDNS", "Found MQTT server port: %d", mqtt_server.port);
+    ESP_LOGI(TAG_mDNS, "Found MQTT server port: %d", mqtt_server.port);
 
     mdns_query_results_free(results);
+
+    mdns_free();
     return true;
 }
 
-Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
+void Mqtt::_connect_handler(void* arg, esp_event_base_t event_base,
+    int32_t event_id, void* event_data)
 {
-    // Queue from sensor
-    _sensor_queue = &temperature_queue;
-    _percent_queue = &percent_queue;
-    // Create queue set
-    _queue_set = xQueueCreateSet(2);
-    xQueueAddToSet(*_sensor_queue, _queue_set);
-    xQueueAddToSet(*_percent_queue, _queue_set);
-
-    // Client initialisation
-    if (_state == state_m::NOT_INITIALISED) {
-        // wait for WI-FI connection and IP
-        xEventGroupWaitBits(common_event_group, _wifi_got_ip, pdFALSE, pdFALSE,
-            portMAX_DELAY);
-        if (!find_mqtt_server(_mdns_mqtt_server)) {
-            mqtt_cfg.uri = CONFIG_BROKER_URL;
-            mqtt_cfg.port = CONFIG_BROKER_PORT;
-        } else {
-            mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
-            mqtt_cfg.port = _mdns_mqtt_server.port;
-        }
+    Mqtt* self = static_cast<Mqtt*>(arg);
+    if (self->client == NULL) {
+        ESP_LOGI(TAG, "Initializing client...");
+        self->init();
     }
+}
+
+// Initialisation mqtt client
+void Mqtt::init(void)
+{
+    if (_state == state_m::INITIALISED) {
+        return;
+    }
+
+    // Create queue set
+    if (_queue_set != nullptr) {
+        _queue_set = xQueueCreateSet(2);
+        xQueueAddToSet(*_sensor_queue, _queue_set);
+        xQueueAddToSet(*_percent_queue, _queue_set);
+    }
+
+    // Search for mDNS MQTT server
+    bool found = false;
+    for (uint8_t i = 0; i < 10; i++) {
+        if (find_mqtt_server(_mdns_mqtt_server)) {
+            found = true;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
+
+    if (found) {
+        mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
+        mqtt_cfg.port = _mdns_mqtt_server.port;
+    } else {
+        mqtt_cfg.uri = CONFIG_BROKER_URL;
+        mqtt_cfg.port = CONFIG_BROKER_PORT;
+    }
+
     mqtt_cfg.client_id = CONFIG_CLIENT_ID;
     mqtt_cfg.username = MQTT_USER;
     mqtt_cfg.password = MQTT_PASSWORD;
     mqtt_cfg.keepalive = CONFIG_MQTT_KEEP_ALIVE;
     mqtt_cfg.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
-    ESP_LOGI(TAG, "MQTT client init");
     client = esp_mqtt_client_init(&mqtt_cfg);
-    esp_mqtt_client_register_event(client, MQTT_EVENT_ANY, mqtt_event_handler,
-        NULL);
-
+    esp_err_t ret = esp_mqtt_client_register_event(client, MQTT_EVENT_ANY,
+        mqtt_event_handler, NULL);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register event handler: %s", esp_err_to_name(ret));
+    }
+    esp_mqtt_client_start(client);
     _state = state_m::INITIALISED;
+    ESP_LOGI(TAG, "Client started");
+}
+
+// Events handler
+void Mqtt::mqtt_event_handler(void* arg, esp_event_base_t event_base,
+    int32_t event_id, void* event_data)
+{
+    ESP_LOGI(TAG, "Event dispatched from event loop base=%s, event_id=%d",
+        event_base, event_id);
+    mqtt_event_handler_cb((esp_mqtt_event_handle_t)event_data);
 }
 
 // Evens callback
 esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {
     ESP_LOGI(TAG, "in event %d", event->event_id);
-    // esp_mqtt_client_handle_t client = event->client;
     switch (event->event_id) {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "Connected to MQTT broker at %s:%d", mqtt_cfg.uri,
@@ -130,30 +203,9 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     }
     return ESP_OK;
 }
-
-// Events handler
-void Mqtt::mqtt_event_handler(void* handler_args, esp_event_base_t base,
-    int32_t event_id, void* event_data)
-{
-    ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base,
-        event_id);
-    mqtt_event_handler_cb((esp_mqtt_event_handle_t)event_data);
-}
-
 // Start MQTT client
-void Mqtt::start()
+void Mqtt::publish()
 {
-    // wait for WI-FI connection and IP
-    EventBits_t bits = xEventGroupWaitBits(common_event_group,
-        _wifi_got_ip | _wifi_disconnect_bit,
-        pdFALSE, pdFALSE, portMAX_DELAY);
-    if (bits & _wifi_got_ip) {
-        ESP_LOGI(TAG, "MQTT Startup..");
-        // ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
-        esp_mqtt_client_start(client);
-        ESP_LOGI(TAG, "Client MQTT started");
-        xEventGroupClearBits(common_event_group, _wifi_got_ip);
-    }
     // Publish sensor data
     SensorData_t sensor_data {};
     uint8_t percent {};
@@ -210,6 +262,9 @@ void Mqtt::start()
 
     for (;;) {
         QueueSetMemberHandle_t activate_handle = xQueueSelectFromSet(_queue_set, portMAX_DELAY);
+        if (_state != state_m::INITIALISED) {
+            return;
+        }
 
         if (activate_handle == *_sensor_queue) {
             if (xQueueReceive(*_sensor_queue, &sensor_data, portMAX_DELAY) == pdTRUE) {
