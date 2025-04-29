@@ -9,6 +9,7 @@
 #include "mqtt_client.h"
 #include "nvs_flash.h" // IWYU pragma: keep
 #include "secrets.h" // IWYU pragma: keep
+#include <cstdint>
 #include <string> // IWYU pragma: keep
 
 typedef struct {
@@ -29,13 +30,13 @@ private:
     enum class state_m {
         NOT_INITIALISED,
         INITIALISED,
-        // READY_TO_CONNECT,
-        // CONNECTING,
-        // WAITING_FOR_IP,
+        STARTED,
+        STOPPED,
         CONNECTED,
         DISCONNECTED,
         // ERROR
     };
+    static uint8_t _connection_retry;
     static state_m _state;
     esp_mqtt_client_handle_t client = NULL;
     static esp_mqtt_client_config_t mqtt_cfg;
@@ -63,9 +64,10 @@ private:
         int32_t event_id, void* event_data);
 
     // Handle MQTT event
-    static void mqtt_event_handler(void* arg, esp_event_base_t event_base,
-        int32_t event_id, void* event_data);
-    static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event);
+    static void mqtt_event_handler(void* handler_args,
+        esp_event_base_t event_base, int32_t event_id,
+        void* event_data);
+    esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event);
 
     QueueSetHandle_t _queue_set = nullptr;
     QueueHandle_t* _sensor_queue;
@@ -81,6 +83,7 @@ public:
     void init(void);
     void publish(void);
     void stop(esp_mqtt_client_handle_t client);
+    void start(esp_mqtt_client_handle_t client);
 
     constexpr static const char* TAG = "MQTT";
     constexpr static const char* TAG_mDNS = "mDNS";

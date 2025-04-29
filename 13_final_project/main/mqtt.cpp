@@ -18,6 +18,7 @@ namespace Mqtt_NS {
 // Static variables
 esp_mqtt_client_config_t Mqtt::mqtt_cfg {};
 Mqtt::state_m Mqtt::_state { Mqtt::state_m::NOT_INITIALISED };
+uint8_t Mqtt::_connection_retry { 0 };
 
 // Constructor
 Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
@@ -123,22 +124,15 @@ void Mqtt::init(void)
     }
 
     // Search for mDNS MQTT server
-    bool found = false;
-    for (uint8_t i = 0; i < 10; i++) {
-        if (find_mqtt_server(_mdns_mqtt_server)) {
-            found = true;
-            break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(5000));
+    while (!find_mqtt_server(_mdns_mqtt_server)) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
-    if (found) {
-        mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
-        mqtt_cfg.port = _mdns_mqtt_server.port;
-    } else {
-        mqtt_cfg.uri = CONFIG_BROKER_URL;
-        mqtt_cfg.port = CONFIG_BROKER_PORT;
-    }
+    // Connect only through mDNS
+    mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
+    mqtt_cfg.port = _mdns_mqtt_server.port;
+    // mqtt_cfg.uri = CONFIG_BROKER_URL;
+    // mqtt_cfg.port = CONFIG_BROKER_PORT;
 
     mqtt_cfg.client_id = CONFIG_CLIENT_ID;
     mqtt_cfg.username = MQTT_USER;
@@ -147,22 +141,37 @@ void Mqtt::init(void)
     mqtt_cfg.protocol_ver = MQTT_PROTOCOL_V_3_1_1;
     client = esp_mqtt_client_init(&mqtt_cfg);
     esp_err_t ret = esp_mqtt_client_register_event(client, MQTT_EVENT_ANY,
-        mqtt_event_handler, NULL);
+        mqtt_event_handler, this);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register event handler: %s", esp_err_to_name(ret));
     }
-    esp_mqtt_client_start(client);
     _state = state_m::INITIALISED;
-    ESP_LOGI(TAG, "Client started");
+    ESP_LOGI(TAG, "Client initialiased");
+
+    // Call start
+    start(client);
+}
+
+void Mqtt::start(esp_mqtt_client_handle_t client)
+{
+    if (client != nullptr and _state == state_m::INITIALISED) {
+        esp_mqtt_client_start(client);
+        _state = state_m::STARTED;
+        ESP_LOGI(TAG, "Client started");
+    }
 }
 
 // Events handler
-void Mqtt::mqtt_event_handler(void* arg, esp_event_base_t event_base,
+void Mqtt::mqtt_event_handler(void* handler_args, esp_event_base_t event_base,
     int32_t event_id, void* event_data)
 {
     ESP_LOGI(TAG, "Event dispatched from event loop base=%s, event_id=%d",
         event_base, event_id);
-    mqtt_event_handler_cb((esp_mqtt_event_handle_t)event_data);
+    Mqtt* instance = static_cast<Mqtt*>(handler_args);
+    if (instance) {
+        instance->mqtt_event_handler_cb(
+            static_cast<esp_mqtt_event_handle_t>(event_data));
+    }
 }
 
 // Evens callback
@@ -175,12 +184,24 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
             mqtt_cfg.port);
         ESP_LOGI(TAG, "Login - \"%s\" password - \"%s\"", mqtt_cfg.username,
             mqtt_cfg.password);
+        _state = state_m::CONNECTED;
+        _connection_retry = 0;
         break;
     case MQTT_EVENT_DISCONNECTED:
+        // if (Mqtt::_connection_retry > 3) {
+        //     stop(event->client);
+        //     ESP_LOGE(
+        //         TAG,
+        //         "Client was not able to connect to MQTT broker.
+        //         Deinitializing...");
+        //     return ESP_FAIL;
+        // }
+        // ESP_LOGI(TAG, "Trying to connect MQTT broker. Try # %d",
+        // Mqtt::_connection_retry + 1);
         ESP_LOGI(TAG, "Disconnected from MQTT broker at %s:%d", mqtt_cfg.uri,
             mqtt_cfg.port);
-        // Client cannot be stopped from task!
-        // esp_mqtt_client_stop(client);
+        _state = state_m::DISCONNECTED;
+        // Mqtt::_connection_retry++;
         break;
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
@@ -191,8 +212,6 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_PUBLISHED:
         break;
     case MQTT_EVENT_DATA:
-        // printf("TOPIC=%.*s\r\n", event->topic_len, event->topic);
-        // printf("DATA=%.*s\r\n", event->data_len, event->data);
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
