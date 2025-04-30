@@ -1,5 +1,6 @@
 #pragma once
 
+#include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h" // IWYU pragma: keep
 #include "freertos/FreeRTOS.h" // IWYU pragma: keep
@@ -11,7 +12,6 @@
 #include "nvs_flash.h" // IWYU pragma: keep
 #include "secrets.h" // IWYU pragma: keep
 #include <cstdint>
-#include <string> // IWYU pragma: keep
 
 typedef struct {
     uint8_t sensor_id; // ID sensor
@@ -37,8 +37,8 @@ private:
         DISCONNECTED,
         // ERROR
     };
-    static uint8_t _connection_retry;
-    static state_m _state;
+    uint8_t _connection_retry;
+    state_m _state;
     esp_mqtt_client_handle_t client = NULL;
     static esp_mqtt_client_config_t mqtt_cfg;
     /*
@@ -71,6 +71,7 @@ private:
     esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event);
 
     QueueSetHandle_t _queue_set = nullptr;
+    EventGroupHandle_t* _common_event_group;
     QueueHandle_t* _sensor_queue;
     QueueHandle_t* _percent_queue;
 
@@ -78,8 +79,9 @@ private:
     state_m _mdns_interface_state { state_m::NOT_INITIALISED };
 
 public:
-    Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue);
-    ~Mqtt(void) = default;
+    Mqtt(EventGroupHandle_t& common_event_group, QueueHandle_t& temperature_queue,
+        QueueHandle_t& percent_queue);
+    ~Mqtt(void);
     bool find_mqtt_server(MdnsMqttServer_t& mqtt_server);
     void connection_watcher(esp_mqtt_client_handle_t client);
     void init(void);
@@ -89,6 +91,9 @@ public:
 
     constexpr static const char* TAG = "MQTT";
     constexpr static const char* TAG_mDNS = "mDNS";
+
+    static constexpr uint8_t MAX_CONNECTION_RETRIES = 20;
+    static constexpr uint32_t MDNS_QUERY_TIMEOUT_MS = 10000;
 };
 
 } // namespace Mqtt_NS

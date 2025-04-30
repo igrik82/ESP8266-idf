@@ -1,28 +1,17 @@
 #include "mqtt.h"
-#include "esp_err.h"
-#include "esp_event.h"
-#include "mdns.h"
-#include "mqtt_client.h"
-#include <cstddef>
-#include <cstdint>
-
-// External variables from main
-extern EventGroupHandle_t common_event_group;
-extern uint8_t _wifi_connect_bit;
-extern uint8_t _wifi_disconnect_bit;
-extern uint8_t _wifi_got_ip;
-extern uint8_t _wifi_lost_ip;
 
 namespace Mqtt_NS {
 
 // Static variables
 esp_mqtt_client_config_t Mqtt::mqtt_cfg {};
-Mqtt::state_m Mqtt::_state { Mqtt::state_m::NOT_INITIALISED };
-uint8_t Mqtt::_connection_retry { 0 };
+// uint8_t _connection_retry { 0 };
 
 // Constructor
-Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
-    : _sensor_queue(&temperature_queue)
+Mqtt::Mqtt(EventGroupHandle_t& common_event_group,
+    QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
+    : _state(state_m::NOT_INITIALISED)
+    , _common_event_group(&common_event_group)
+    , _sensor_queue(&temperature_queue)
     , _percent_queue(&percent_queue)
     , _mdns_mqtt_server({})
 {
@@ -32,6 +21,13 @@ Mqtt::Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue)
         &Mqtt::_disconnect_handler, this));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
         &Mqtt::_connect_handler, this));
+}
+
+Mqtt::~Mqtt(void)
+{
+    if (client != nullptr) {
+        stop(client);
+    }
 }
 
 void Mqtt::_disconnect_handler(void* arg, esp_event_base_t event_base,
@@ -46,11 +42,17 @@ void Mqtt::_disconnect_handler(void* arg, esp_event_base_t event_base,
 
 void Mqtt::stop(esp_mqtt_client_handle_t client)
 {
+    if (client == nullptr) {
+        ESP_LOGI(TAG, "MQTT client already stopped");
+        return;
+    }
+
     ESP_LOGI(TAG, "Stoping mqtt client...");
     esp_mqtt_client_destroy(client);
-    Mqtt::client = NULL;
+    client = nullptr;
     _state = state_m::NOT_INITIALISED;
-    if (_queue_set) {
+
+    if (_queue_set != nullptr) {
         ESP_LOGI(TAG, "Deleting queue set from mqtt client");
         vQueueDelete(_queue_set);
         _queue_set = nullptr;
@@ -68,6 +70,12 @@ bool Mqtt::find_mqtt_server(MdnsMqttServer_t& mqtt_server)
 
     if (err != ESP_OK || results == NULL) {
         ESP_LOGW(TAG_mDNS, "Failed to find MQTT servers");
+        mdns_query_results_free(results);
+        return false;
+    }
+
+    // Check results for errors
+    if (results->hostname == nullptr || results->addr == nullptr) {
         mdns_query_results_free(results);
         return false;
     }
@@ -93,7 +101,10 @@ bool Mqtt::find_mqtt_server(MdnsMqttServer_t& mqtt_server)
     mqtt_server.port = results->port;
     ESP_LOGI(TAG_mDNS, "Found MQTT server port: %d", mqtt_server.port);
 
-    mdns_query_results_free(results);
+    // Free results
+    if (results) {
+        mdns_query_results_free(results);
+    }
 
     mdns_free();
     return true;
@@ -125,7 +136,7 @@ void Mqtt::init(void)
 
     // Search for mDNS MQTT server
     while (!find_mqtt_server(_mdns_mqtt_server)) {
-        vTaskDelay(pdMS_TO_TICKS(10000));
+        vTaskDelay(pdMS_TO_TICKS(MDNS_QUERY_TIMEOUT_MS));
     }
 
     // Connect only through mDNS
@@ -165,8 +176,8 @@ void Mqtt::start(esp_mqtt_client_handle_t client)
 
 void Mqtt::connection_watcher(esp_mqtt_client_handle_t client)
 {
-    xEventGroupWaitBits(common_event_group, _mqtt_disconnect_bit, pdTRUE, pdFALSE,
-        portMAX_DELAY);
+    xEventGroupWaitBits(*_common_event_group, _mqtt_disconnect_bit, pdTRUE,
+        pdFALSE, portMAX_DELAY);
     stop(client);
     init();
 }
@@ -193,7 +204,7 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "Login - \"%s\" password - \"%s\"", mqtt_cfg.username,
             mqtt_cfg.password);
         _state = state_m::CONNECTED;
-        Mqtt::_connection_retry = 0;
+        _connection_retry = 0;
 
         // Device left HDD
         esp_mqtt_client_publish(event->client, topic_left.c_str(),
@@ -213,22 +224,22 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_DISCONNECTED:
 
         // Retry connection 20 times about 3 minutes
-        if (Mqtt::_connection_retry > 20) {
+        if (_connection_retry > MAX_CONNECTION_RETRIES) {
             ESP_LOGW(
                 TAG,
                 "Client was not able to connect to MQTT broker. Deinitializing...");
-            Mqtt::_connection_retry = 0;
-            xEventGroupSetBits(common_event_group, _mqtt_disconnect_bit);
+            _connection_retry = 0;
+            xEventGroupSetBits(*_common_event_group, _mqtt_disconnect_bit);
             break;
         }
         ESP_LOGI(TAG, "Trying to connect MQTT broker. Try # %d",
-            Mqtt::_connection_retry + 1);
+            _connection_retry + 1);
         if (_state == state_m::CONNECTED) {
             ESP_LOGI(TAG, "Disconnected from MQTT broker at %s:%d", mqtt_cfg.uri,
                 mqtt_cfg.port);
             _state = state_m::DISCONNECTED;
         }
-        Mqtt::_connection_retry++;
+        _connection_retry++;
         break;
 
     case MQTT_EVENT_SUBSCRIBED:
@@ -266,14 +277,14 @@ void Mqtt::publish()
         if (activate_handle == *_sensor_queue) {
             if (xQueueReceive(*_sensor_queue, &sensor_data, portMAX_DELAY) == pdTRUE) {
                 if (sensor_data.temperature == 0.0f && sensor_data.sensor_id == 0) {
-                    ESP_LOGW(TAG, "Получено нулевое значение от датчика %d",
+                    ESP_LOGW(TAG, "Received zero value from sensor %d",
                         sensor_data.sensor_id);
                     continue; // skip sending
                 }
-                char msg[10]; // buffer for message
+                char msg[12]; // buffer for message
                 snprintf(msg, sizeof(msg), "%.2f", sensor_data.temperature);
 
-                char topic[50]; // buffer for topic
+                char topic[64]; // buffer for topic
                 snprintf(topic, sizeof(topic),
                     "homeassistant/sensor/HDDdock/temp_%d/state",
                     sensor_data.sensor_id);

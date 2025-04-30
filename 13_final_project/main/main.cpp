@@ -52,7 +52,7 @@ void wifi_connection(void* pvParameter)
 TaskHandle_t mqtt_connection_handle = NULL;
 void mqtt_connection(void* pvParameter)
 {
-    Mqtt_NS::Mqtt mqtt(temperature_queue, duty_percent_queue);
+    Mqtt_NS::Mqtt mqtt(common_event_group, temperature_queue, duty_percent_queue);
     for (;;) {
         // mqtt.publish();
         vTaskDelay(pdMS_TO_TICKS(1000));
