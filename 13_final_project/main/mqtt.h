@@ -80,6 +80,7 @@ public:
     Mqtt(QueueHandle_t& temperature_queue, QueueHandle_t& percent_queue);
     ~Mqtt(void) = default;
     bool find_mqtt_server(MdnsMqttServer_t& mqtt_server);
+    void connection_watcher(esp_mqtt_client_handle_t client);
     void init(void);
     void publish(void);
     void stop(esp_mqtt_client_handle_t client);

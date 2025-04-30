@@ -158,7 +158,17 @@ void Mqtt::start(esp_mqtt_client_handle_t client)
         esp_mqtt_client_start(client);
         _state = state_m::STARTED;
         ESP_LOGI(TAG, "Client started");
+        // Watcher for connection
+        connection_watcher(client);
     }
+}
+
+void Mqtt::connection_watcher(esp_mqtt_client_handle_t client)
+{
+    xEventGroupWaitBits(common_event_group, _mqtt_disconnect_bit, pdTRUE, pdFALSE,
+        portMAX_DELAY);
+    stop(client);
+    init();
 }
 
 // Events handler
@@ -185,24 +195,29 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         ESP_LOGI(TAG, "Login - \"%s\" password - \"%s\"", mqtt_cfg.username,
             mqtt_cfg.password);
         _state = state_m::CONNECTED;
-        _connection_retry = 0;
+        Mqtt::_connection_retry = 0;
         break;
     case MQTT_EVENT_DISCONNECTED:
-        // if (Mqtt::_connection_retry > 3) {
-        //     stop(event->client);
-        //     ESP_LOGE(
-        //         TAG,
-        //         "Client was not able to connect to MQTT broker.
-        //         Deinitializing...");
-        //     return ESP_FAIL;
-        // }
-        // ESP_LOGI(TAG, "Trying to connect MQTT broker. Try # %d",
-        // Mqtt::_connection_retry + 1);
-        ESP_LOGI(TAG, "Disconnected from MQTT broker at %s:%d", mqtt_cfg.uri,
-            mqtt_cfg.port);
-        _state = state_m::DISCONNECTED;
-        // Mqtt::_connection_retry++;
+
+        // Retry connection 20 times about 3 minutes
+        if (Mqtt::_connection_retry > 20) {
+            ESP_LOGW(
+                TAG,
+                "Client was not able to connect to MQTT broker. Deinitializing...");
+            Mqtt::_connection_retry = 0;
+            xEventGroupSetBits(common_event_group, _mqtt_disconnect_bit);
+            break;
+        }
+        ESP_LOGI(TAG, "Trying to connect MQTT broker. Try # %d",
+            Mqtt::_connection_retry + 1);
+        if (_state == state_m::CONNECTED) {
+            ESP_LOGI(TAG, "Disconnected from MQTT broker at %s:%d", mqtt_cfg.uri,
+                mqtt_cfg.port);
+            _state = state_m::DISCONNECTED;
+        }
+        Mqtt::_connection_retry++;
         break;
+
     case MQTT_EVENT_SUBSCRIBED:
         ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED, msg_id=%d", event->msg_id);
         break;
