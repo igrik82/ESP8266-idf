@@ -7,6 +7,7 @@
 #include "freertos/task.h"
 #include "mdns.h" // IWYU pragma: keep
 #include "mqtt_client.h"
+#include "mqtt_device.h" // IWYU pragma: keep
 #include "nvs_flash.h" // IWYU pragma: keep
 #include "secrets.h" // IWYU pragma: keep
 #include <cstdint>

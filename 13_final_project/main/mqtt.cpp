@@ -117,7 +117,7 @@ void Mqtt::init(void)
     }
 
     // Create queue set
-    if (_queue_set != nullptr) {
+    if (_queue_set == nullptr) {
         _queue_set = xQueueCreateSet(2);
         xQueueAddToSet(*_sensor_queue, _queue_set);
         xQueueAddToSet(*_percent_queue, _queue_set);
@@ -175,8 +175,6 @@ void Mqtt::connection_watcher(esp_mqtt_client_handle_t client)
 void Mqtt::mqtt_event_handler(void* handler_args, esp_event_base_t event_base,
     int32_t event_id, void* event_data)
 {
-    ESP_LOGI(TAG, "Event dispatched from event loop base=%s, event_id=%d",
-        event_base, event_id);
     Mqtt* instance = static_cast<Mqtt*>(handler_args);
     if (instance) {
         instance->mqtt_event_handler_cb(
@@ -187,8 +185,8 @@ void Mqtt::mqtt_event_handler(void* handler_args, esp_event_base_t event_base,
 // Evens callback
 esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {
-    ESP_LOGI(TAG, "in event %d", event->event_id);
     switch (event->event_id) {
+
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "Connected to MQTT broker at %s:%d", mqtt_cfg.uri,
             mqtt_cfg.port);
@@ -196,7 +194,22 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
             mqtt_cfg.password);
         _state = state_m::CONNECTED;
         Mqtt::_connection_retry = 0;
+
+        // Device left HDD
+        esp_mqtt_client_publish(event->client, topic_left.c_str(),
+            (device + msg_left).c_str(), 0, 1, 1);
+        // Device right HDD
+        esp_mqtt_client_publish(event->client, topic_right.c_str(),
+            (device + msg_right).c_str(), 0, 1, 1);
+        // Device fan
+        esp_mqtt_client_publish(event->client, topic_fan.c_str(),
+            (device + msg_fan).c_str(), 0, 1, 1);
+
+        // Publish sensor data
+        publish();
+
         break;
+
     case MQTT_EVENT_DISCONNECTED:
 
         // Retry connection 20 times about 3 minutes
@@ -244,59 +257,9 @@ void Mqtt::publish()
     SensorData_t sensor_data {};
     uint8_t percent {};
 
-    const std::string device = R"({
-  "device": {
-    "name": "HDD Station",
-    "model": "HDD Station",
-    "ids": "DockHDD24D7EB118208",
-    "mf": "Игорь Смоляков",
-    "sw": "2.00",
-    "hw": "1.01",
-    "cu": "http://192.168.88.13"
-  },)";
-
-    // Temperature left HDD
-    const std::string topic_left = R"(homeassistant/sensor/HDDdock_temp_left/config)";
-    const std::string msg_left = R"(
-  "name": "Left HDD",
-  "deve_cla": "temperature",
-  "stat_t": "homeassistant/sensor/HDDdock/temp_0/state",
-  "uniq_id": "DockHDD_temp_left",
-  "icon": "mdi:harddisk",
-  "unit_of_meas": "°C"
-})";
-    esp_mqtt_client_publish(client, topic_left.c_str(),
-        (device + msg_left).c_str(), 0, 1, 1);
-
-    // Temperature right HDD
-    const std::string topic_right = R"(homeassistant/sensor/HDDdock_temp_right/config)";
-    const std::string msg_right = R"(
-  "name": "Right HDD",
-  "deve_cla": "temperature",
-  "stat_t": "homeassistant/sensor/HDDdock/temp_1/state",
-  "uniq_id": "DockHDD_temp_right",
-  "icon": "mdi:harddisk",
-  "unit_of_meas": "°C"
- })";
-    esp_mqtt_client_publish(client, topic_right.c_str(),
-        (device + msg_right).c_str(), 0, 1, 1);
-
-    // Fan power
-    const std::string topic_fan = R"(homeassistant/sensor/HDDdock_fan/config)";
-    const std::string msg_fan = R"(
-    "name": "Fan HDD",
-  "deve_cla": "power_factor",
-  "stat_t": "homeassistant/sensor/HDDdock/fan/state",
-  "uniq_id": "DockHDD_fan",
-  "icon": "mdi:fan",
-  "unit_of_meas": "%"
- })";
-    esp_mqtt_client_publish(client, topic_fan.c_str(), (device + msg_fan).c_str(),
-        0, 1, 1);
-
     for (;;) {
         QueueSetMemberHandle_t activate_handle = xQueueSelectFromSet(_queue_set, portMAX_DELAY);
-        if (_state != state_m::INITIALISED) {
+        if (_state != state_m::CONNECTED) {
             return;
         }
 
