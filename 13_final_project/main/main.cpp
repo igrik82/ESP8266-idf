@@ -54,7 +54,8 @@ void mqtt_connection(void* pvParameter)
 {
     Mqtt_NS::Mqtt mqtt(common_event_group, temperature_queue, duty_percent_queue);
     for (;;) {
-        // mqtt.publish();
+        mqtt.publish();
+        mqtt.connection_watcher();
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
@@ -207,8 +208,7 @@ extern "C" void app_main(void)
         &get_temperature_handle);
 
     // Debug tasks
-    // xTaskCreate(checkStackUsage, "CheckStack", STACK_TASK_SIZE, NULL, 5,
-    // NULL);
+    // xTaskCreate(checkStackUsage, "CheckStack", STACK_TASK_SIZE, NULL, 5, NULL);
     xTaskCreate(&heapMonitor, "HeapMonitor", 2048, NULL, 5, NULL);
 
     // Fan control.

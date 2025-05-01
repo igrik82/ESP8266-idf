@@ -1,10 +1,14 @@
 #include "mqtt.h"
+#include "esp_err.h"
+#include "esp_event.h"
+#include "portmacro.h"
+#include "projdefs.h"
+#include <cstddef>
 
 namespace Mqtt_NS {
 
 // Static variables
 esp_mqtt_client_config_t Mqtt::mqtt_cfg {};
-// uint8_t _connection_retry { 0 };
 
 // Constructor
 Mqtt::Mqtt(EventGroupHandle_t& common_event_group,
@@ -26,21 +30,22 @@ Mqtt::Mqtt(EventGroupHandle_t& common_event_group,
 Mqtt::~Mqtt(void)
 {
     if (client != nullptr) {
-        stop(client);
+        stop();
     }
 }
 
 void Mqtt::_disconnect_handler(void* arg, esp_event_base_t event_base,
     int32_t event_id, void* event_data)
 {
+    ESP_LOGI(TAG, "Disconnect event occured");
     Mqtt* self = static_cast<Mqtt*>(arg);
     if (self->client == NULL) {
         return;
     }
-    self->stop(self->client);
+    self->stop();
 }
 
-void Mqtt::stop(esp_mqtt_client_handle_t client)
+void Mqtt::stop()
 {
     if (client == nullptr) {
         ESP_LOGI(TAG, "MQTT client already stopped");
@@ -50,13 +55,12 @@ void Mqtt::stop(esp_mqtt_client_handle_t client)
     ESP_LOGI(TAG, "Stoping mqtt client...");
     esp_mqtt_client_destroy(client);
     client = nullptr;
-    _state = state_m::NOT_INITIALISED;
 
-    if (_queue_set != nullptr) {
-        ESP_LOGI(TAG, "Deleting queue set from mqtt client");
-        vQueueDelete(_queue_set);
-        _queue_set = nullptr;
-    }
+    // ESP_ERROR_CHECK(esp_event_handler_unregister(
+    //     WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &Mqtt::_disconnect_handler));
+    // ESP_ERROR_CHECK(esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP,
+    //     &Mqtt::_connect_handler))
+    _state = state_m::NOT_INITIALISED;
 }
 
 bool Mqtt::find_mqtt_server(MdnsMqttServer_t& mqtt_server)
@@ -123,28 +127,28 @@ void Mqtt::_connect_handler(void* arg, esp_event_base_t event_base,
 // Initialisation mqtt client
 void Mqtt::init(void)
 {
+    ESP_LOGI(TAG, "Init method");
     if (_state == state_m::INITIALISED) {
         return;
     }
 
     // Create queue set
-    if (_queue_set == nullptr) {
-        _queue_set = xQueueCreateSet(2);
-        xQueueAddToSet(*_sensor_queue, _queue_set);
-        xQueueAddToSet(*_percent_queue, _queue_set);
+    if (_queue_set != nullptr) {
+        vQueueDelete(_queue_set);
     }
 
-    // Search for mDNS MQTT server
-    while (!find_mqtt_server(_mdns_mqtt_server)) {
-        vTaskDelay(pdMS_TO_TICKS(MDNS_QUERY_TIMEOUT_MS));
+    _queue_set = xQueueCreateSet(2);
+    xQueueAddToSet(*_sensor_queue, _queue_set);
+    xQueueAddToSet(*_percent_queue, _queue_set);
+
+    if (find_mqtt_server(_mdns_mqtt_server)) {
+        // Connect through mDNS
+        mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
+        mqtt_cfg.port = _mdns_mqtt_server.port;
+    } else {
+        mqtt_cfg.uri = CONFIG_BROKER_URL;
+        mqtt_cfg.port = CONFIG_BROKER_PORT;
     }
-
-    // Connect only through mDNS
-    mqtt_cfg.uri = _mdns_mqtt_server.full_proto;
-    mqtt_cfg.port = _mdns_mqtt_server.port;
-    // mqtt_cfg.uri = CONFIG_BROKER_URL;
-    // mqtt_cfg.port = CONFIG_BROKER_PORT;
-
     mqtt_cfg.client_id = CONFIG_CLIENT_ID;
     mqtt_cfg.username = MQTT_USER;
     mqtt_cfg.password = MQTT_PASSWORD;
@@ -160,26 +164,30 @@ void Mqtt::init(void)
     ESP_LOGI(TAG, "Client initialiased");
 
     // Call start
-    start(client);
+    start();
 }
 
-void Mqtt::start(esp_mqtt_client_handle_t client)
+void Mqtt::start()
 {
     if (client != nullptr and _state == state_m::INITIALISED) {
         esp_mqtt_client_start(client);
         _state = state_m::STARTED;
         ESP_LOGI(TAG, "Client started");
         // Watcher for connection
-        connection_watcher(client);
+        // connection_watcher();
     }
 }
 
-void Mqtt::connection_watcher(esp_mqtt_client_handle_t client)
+void Mqtt::connection_watcher()
 {
-    xEventGroupWaitBits(*_common_event_group, _mqtt_disconnect_bit, pdTRUE,
-        pdFALSE, portMAX_DELAY);
-    stop(client);
-    init();
+    EventBits_t bit = xEventGroupWaitBits(
+        *_common_event_group, _mqtt_disconnect_bit, pdTRUE, pdFALSE, 0);
+
+    if (bit & _mqtt_disconnect_bit) {
+        bit = 0;
+        stop();
+        init();
+    }
 }
 
 // Events handler
@@ -199,12 +207,21 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     switch (event->event_id) {
 
     case MQTT_EVENT_CONNECTED:
+        if (_state != state_m::CONNECTED) {
+            // Set mqtt connection bit
+            xEventGroupSetBits(*_common_event_group, _mqtt_connect_bit);
+        }
+
         ESP_LOGI(TAG, "Connected to MQTT broker at %s:%d", mqtt_cfg.uri,
             mqtt_cfg.port);
         ESP_LOGI(TAG, "Login - \"%s\" password - \"%s\"", mqtt_cfg.username,
             mqtt_cfg.password);
         _state = state_m::CONNECTED;
         _connection_retry = 0;
+
+        // Clear queues
+        xQueueReset(*_sensor_queue);
+        xQueueReset(*_percent_queue);
 
         // Device left HDD
         esp_mqtt_client_publish(event->client, topic_left.c_str(),
@@ -215,9 +232,6 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         // Device fan
         esp_mqtt_client_publish(event->client, topic_fan.c_str(),
             (device + msg_fan).c_str(), 0, 1, 1);
-
-        // Publish sensor data
-        publish();
 
         break;
 
@@ -268,48 +282,52 @@ void Mqtt::publish()
     SensorData_t sensor_data {};
     uint8_t percent {};
 
-    for (;;) {
-        QueueSetMemberHandle_t activate_handle = xQueueSelectFromSet(_queue_set, portMAX_DELAY);
-        if (_state != state_m::CONNECTED) {
-            return;
+    // xEventGroupWaitBits(*_common_event_group, _mqtt_connect_bit, pdTRUE,
+    // pdFALSE,
+    //     portMAX_DELAY);
+    if (_state != state_m::CONNECTED) {
+        return;
+    }
+
+    QueueSetMemberHandle_t activate_handle = xQueueSelectFromSet(_queue_set, 0);
+    if (activate_handle == nullptr) {
+        return;
+    }
+
+    if (activate_handle == *_sensor_queue) {
+        if (xQueueReceive(*_sensor_queue, &sensor_data, portMAX_DELAY) == pdTRUE) {
+            if (sensor_data.temperature == 0.0f && sensor_data.sensor_id == 0) {
+                ESP_LOGW(TAG, "Received zero value from sensor %d",
+                    sensor_data.sensor_id);
+                return; // skip sending
+            }
+            char msg[12]; // buffer for message
+            snprintf(msg, sizeof(msg), "%.2f", sensor_data.temperature);
+
+            char topic[64]; // buffer for topic
+            snprintf(topic, sizeof(topic),
+                "homeassistant/sensor/HDDdock/temp_%d/state",
+                sensor_data.sensor_id);
+
+            ESP_LOGI(TAG, "Temperature from MQTT: %s %s", msg, topic);
+            esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
+        } else {
+            ESP_LOGE(TAG, "Failed to receive data from sensor queue");
         }
 
-        if (activate_handle == *_sensor_queue) {
-            if (xQueueReceive(*_sensor_queue, &sensor_data, portMAX_DELAY) == pdTRUE) {
-                if (sensor_data.temperature == 0.0f && sensor_data.sensor_id == 0) {
-                    ESP_LOGW(TAG, "Received zero value from sensor %d",
-                        sensor_data.sensor_id);
-                    continue; // skip sending
-                }
-                char msg[12]; // buffer for message
-                snprintf(msg, sizeof(msg), "%.2f", sensor_data.temperature);
+    } else if (activate_handle == *_percent_queue) {
+        if (xQueueReceive(*_percent_queue, &percent, portMAX_DELAY) == pdTRUE) {
 
-                char topic[64]; // buffer for topic
-                snprintf(topic, sizeof(topic),
-                    "homeassistant/sensor/HDDdock/temp_%d/state",
-                    sensor_data.sensor_id);
+            char msg[10]; // buffer for message
+            snprintf(msg, sizeof(msg), "%d", percent);
 
-                ESP_LOGI(TAG, "Temperature from MQTT: %s %s", msg, topic);
-                esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
-            } else {
-                ESP_LOGE(TAG, "Failed to receive data from sensor queue");
-            }
+            char topic[50]; // buffer for topic
+            snprintf(topic, sizeof(topic), "homeassistant/sensor/HDDdock/fan/state");
 
-        } else if (activate_handle == *_percent_queue) {
-            if (xQueueReceive(*_percent_queue, &percent, portMAX_DELAY) == pdTRUE) {
-
-                char msg[10]; // buffer for message
-                snprintf(msg, sizeof(msg), "%d", percent);
-
-                char topic[50]; // buffer for topic
-                snprintf(topic, sizeof(topic),
-                    "homeassistant/sensor/HDDdock/fan/state");
-
-                ESP_LOGI(TAG, "Percent from MQTT: %s %s", msg, topic);
-                esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
-            } else {
-                ESP_LOGE(TAG, "Failed to receive data from percent queue");
-            }
+            ESP_LOGI(TAG, "Percent from MQTT: %s %s", msg, topic);
+            esp_mqtt_client_publish(client, topic, msg, 0, 0, 0);
+        } else {
+            ESP_LOGE(TAG, "Failed to receive data from percent queue");
         }
     }
 }

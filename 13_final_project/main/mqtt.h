@@ -83,16 +83,16 @@ public:
         QueueHandle_t& percent_queue);
     ~Mqtt(void);
     bool find_mqtt_server(MdnsMqttServer_t& mqtt_server);
-    void connection_watcher(esp_mqtt_client_handle_t client);
+    void connection_watcher();
     void init(void);
     void publish(void);
-    void stop(esp_mqtt_client_handle_t client);
-    void start(esp_mqtt_client_handle_t client);
+    void stop();
+    void start();
 
     constexpr static const char* TAG = "MQTT";
     constexpr static const char* TAG_mDNS = "mDNS";
 
-    static constexpr uint8_t MAX_CONNECTION_RETRIES = 20;
+    static constexpr uint8_t MAX_CONNECTION_RETRIES = 3;
     static constexpr uint32_t MDNS_QUERY_TIMEOUT_MS = 10000;
 };
 
