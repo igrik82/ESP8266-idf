@@ -9,7 +9,6 @@
 #include "gpio.h" // IWYU pragma: keep
 #include "http.h" // IWYU pragma: keep
 #include "mqtt.h"
-#include "nvs.h"
 #include "nvs_flash.h"
 #include "wifi_simple.h"
 #include <cmath>
@@ -29,16 +28,21 @@ typedef struct {
 
 // TODO: Make class Event Manager
 EventGroupHandle_t common_event_group = xEventGroupCreate();
-uint8_t _wifi_connect_bit { BIT0 };
-uint8_t _wifi_disconnect_bit { BIT1 };
-uint8_t _wifi_got_ip { BIT2 };
-uint8_t _wifi_lost_ip { BIT3 };
 
 QueueHandle_t temperature_queue_PWM = xQueueCreate(5, sizeof(SensorData_t));
 QueueHandle_t duty_percent_queue = xQueueCreate(5, sizeof(uint8_t));
 QueueHandle_t temperature_queue = xQueueCreate(5, sizeof(SensorData_t));
 
 // ===================== FreeRTOS Tasks =======================================
+TaskHandle_t http_server_handle = NULL;
+void http_server(void* pvParameter)
+{
+    Http_NS::HttpServer server;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 TaskHandle_t wifi_connection_handle = NULL;
 void wifi_connection(void* pvParameter)
 {
@@ -195,8 +199,6 @@ extern "C" void app_main(void)
     Temp_param param = { onewire_pin, ds18b20_address };
 
     // ======================= Tasks Looping ==================================
-
-    Http_NS::HttpServer server;
 
     xTaskCreate(&wifi_connection, "Wifi", STACK_TASK_SIZE, &wifi, 5,
         &wifi_connection_handle);
