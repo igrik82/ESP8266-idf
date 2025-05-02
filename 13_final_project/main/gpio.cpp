@@ -2,6 +2,7 @@
 #include "esp_err.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "projdefs.h"
 #include "rom/ets_sys.h"
 /*
  * TODO:
@@ -242,7 +243,7 @@ esp_err_t DS18B20::get_temp(uint8_t (&address)[8], float& temperature)
 
     match_rom(address); // Set address
     write_byte(CONVERT_T); // Convert temperature
-    ets_delay_us(WAIT_FOR_TEMPERATURE_CONVERSION);
+    vTaskDelay(pdMS_TO_TICKS(WAIT_FOR_TEMPERATURE_CONVERSION));
 
     match_rom(address);
     write_byte(READ_SCRATCHPAD); // READ SCRATCHPAD command
