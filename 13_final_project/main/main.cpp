@@ -29,11 +29,29 @@ typedef struct {
 // TODO: Make class Event Manager
 EventGroupHandle_t common_event_group = xEventGroupCreate();
 
-QueueHandle_t temperature_queue_PWM = xQueueCreate(5, sizeof(SensorData_t));
+// Queue for fan control must contain at least 6 elements. Because average
+// data contain 6 measurements from sensors
+QueueHandle_t temperature_queue_PWM = xQueueCreate(10, sizeof(SensorData_t));
+
 QueueHandle_t duty_percent_queue = xQueueCreate(5, sizeof(uint8_t));
 QueueHandle_t temperature_queue = xQueueCreate(5, sizeof(SensorData_t));
 
 // ===================== FreeRTOS Tasks =======================================
+TaskHandle_t fan_control_handle = NULL;
+void fan_control(void* pvParameter)
+{
+    // Pin for fan
+    uint8_t pin = 13;
+
+    Fan_NS::FanPWM fan(pin, &temperature_queue_PWM, &duty_percent_queue);
+    for (;;) {
+        if (uxQueueMessagesWaiting(temperature_queue_PWM) >= 6) {
+            fan.start();
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 TaskHandle_t http_server_handle = NULL;
 void http_server(void* pvParameter)
 {
@@ -209,15 +227,11 @@ extern "C" void app_main(void)
     xTaskCreate(&get_temperature, "Temperature", STACK_TASK_SIZE, &param, 5,
         &get_temperature_handle);
 
+    xTaskCreate(&fan_control, "FanControl", STACK_TASK_SIZE, NULL, 5, NULL);
+
     // Debug tasks
     // xTaskCreate(checkStackUsage, "CheckStack", STACK_TASK_SIZE, NULL, 5, NULL);
     xTaskCreate(&heapMonitor, "HeapMonitor", 2048, NULL, 5, NULL);
-
-    // Fan control.
-    // NOTE: Keep this after all other tasks, because it not working
-    // in FreeRTOS task.
-    Fan_NS::FanPWM fan_pwm(13, &temperature_queue_PWM, &duty_percent_queue);
-    fan_pwm.start();
 
     // ======================= FreeRTOS Specific =============================
     // BUG: Without this, FreeRTOS tasks will crash
