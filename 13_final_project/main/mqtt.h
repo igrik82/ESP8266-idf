@@ -17,6 +17,7 @@ typedef struct {
     uint8_t sensor_id; // ID sensor
     float temperature; // Temperature
 } SensorData_t;
+
 typedef struct {
     char hostname[60]; // hostname
     char ip[16]; // IPv4 (example "192.168.111.222")
