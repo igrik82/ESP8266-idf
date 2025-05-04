@@ -1,6 +1,7 @@
 #include "mqtt.h"
 #include "esp_err.h"
 #include "esp_event.h"
+#include "mqtt_device.h"
 #include "portmacro.h"
 #include "projdefs.h"
 #include <cstddef>
@@ -233,6 +234,9 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
         esp_mqtt_client_publish(event->client, topic_fan.c_str(),
             (device + msg_fan).c_str(), 0, 1, 1);
 
+        // Subscribe to command topic
+        esp_mqtt_client_subscribe(event->client, command_topic.c_str(), 0);
+        ESP_LOGI(TAG, "Subscribed to command topic %s", command_topic.c_str());
         break;
 
     case MQTT_EVENT_DISCONNECTED:
@@ -265,6 +269,28 @@ esp_err_t Mqtt::mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
     case MQTT_EVENT_PUBLISHED:
         break;
     case MQTT_EVENT_DATA:
+
+        ESP_LOGI(TAG, "Command received from topic - %s", event->topic);
+        ESP_LOGI(TAG, "Command received - %s", event->data);
+
+        if (strncmp(event->topic, command_topic.c_str(), event->data_len) == 0) {
+
+            if (strncmp(event->data, "ENABLE_HTTP", event->data_len) == 0) {
+                is_http_running = true;
+                vTaskSuspend(get_temperature_handle);
+                vTaskDelay(pdMS_TO_TICKS(100));
+                xTaskCreate(&http_server, "HTTP Server", STACK_TASK_SIZE * 2, NULL, 5,
+                    &http_server_handle);
+
+            } else if (strncmp(event->data, "DISABLE_HTTP", event->data_len) == 0) {
+                is_http_running = false;
+                vTaskDelay(pdMS_TO_TICKS(100));
+                if (http_server_handle) {
+                    http_server_handle = NULL;
+                }
+                vTaskResume(get_temperature_handle);
+            }
+        }
         break;
     case MQTT_EVENT_ERROR:
         ESP_LOGI(TAG, "MQTT_EVENT_ERROR");

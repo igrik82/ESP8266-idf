@@ -19,14 +19,15 @@ private:
     static void _disconnect_handler(void* arg, esp_event_base_t event_base,
         int32_t event_id, void* event_data);
 
-    static httpd_handle_t start_webserver(void);
-    static httpd_handle_t stop_webserver(httpd_handle_t server);
-
 public:
     HttpServer(void);
-    ~HttpServer(void) = default;
+    ~HttpServer(void);
     static httpd_handle_t _server;
     constexpr static const char* TAG = "HTTPServer";
     constexpr static const char* TAG_SPIFF = "SPIFFS";
+    static esp_vfs_spiffs_conf_t spiffs_config;
+
+    static esp_err_t start_webserver(void);
+    static void stop_webserver(void);
 };
 } // Namespace Http_NS

@@ -3,11 +3,11 @@
 namespace Http_NS {
 
 httpd_handle_t HttpServer::_server = NULL;
+esp_vfs_spiffs_conf_t HttpServer::spiffs_config;
 
 HttpServer::HttpServer(void)
 {
     // initialize and mounting SPIFFS
-    esp_vfs_spiffs_conf_t spiffs_config;
     spiffs_config.base_path = "/spiffs";
     spiffs_config.partition_label = "storage";
     spiffs_config.max_files = 5;
@@ -34,17 +34,25 @@ HttpServer::HttpServer(void)
         ESP_LOGI(TAG_SPIFF, "Partition size: total: %zu, used: %zu", total, used);
     }
 
-    // Register event handler for starting http server
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
-        &_connect_handler, this));
-    ESP_ERROR_CHECK(esp_event_handler_register(
-        WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &_disconnect_handler, this));
+    // // Register event handler for starting http server
+    // ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
+    //     &_connect_handler, this));
+    // ESP_ERROR_CHECK(esp_event_handler_register(
+    //     WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &_disconnect_handler, this));
+}
+
+HttpServer::~HttpServer(void)
+{
+    if (_server != NULL) {
+        stop_webserver();
+        ESP_LOGI(TAG, "Server is destructed");
+    }
 }
 
 /* An HTTP GET handler */
 static esp_err_t root_get_handler(httpd_req_t* req)
 {
-    char html_file[] = "/spiffs/favicon.ico";
+    char html_file[] = "/spiffs/index.html";
 
     // Check if destination file exists before renaming
     ESP_LOGI(HttpServer::TAG_SPIFF, "Trying to open %s", html_file);
@@ -70,8 +78,8 @@ static esp_err_t root_get_handler(httpd_req_t* req)
     ESP_LOGI(HttpServer::TAG, "Sending file: %s (%ld bytes)...", html_file,
         file_stat.st_size);
 
-    // Set the content type header
-    httpd_resp_set_type(req, "image/x-icon");
+    // // Set the content type header
+    // httpd_resp_set_type(req, "image/x-icon");
 
     // Send the file
     while ((bytes_read = fread(buffer, 1, sizeof(buffer), fd)) > 0) {
@@ -91,7 +99,7 @@ static esp_err_t root_get_handler(httpd_req_t* req)
     return ESP_OK;
 }
 
-httpd_uri_t root_dir = { .uri = "/favicon.ico",
+httpd_uri_t root_dir = { .uri = "/",
     .method = HTTP_GET,
     .handler = root_get_handler,
     .user_ctx = NULL };
@@ -101,28 +109,31 @@ void HttpServer::_connect_handler(void* arg, esp_event_base_t event_base,
 {
     if (HttpServer::_server == NULL) {
         ESP_LOGI(TAG, "Starting webserver");
-        HttpServer::_server = HttpServer::start_webserver();
+        start_webserver();
     }
 }
-httpd_handle_t HttpServer::start_webserver(void)
+
+esp_err_t HttpServer::start_webserver(void)
 {
-    httpd_handle_t server = NULL;
+    if (_server != NULL) {
+        return ESP_OK;
+    }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
-    if (httpd_start(&server, &config) == ESP_OK) {
+    if (httpd_start(&_server, &config) == ESP_OK) {
 
         // Set URI handlers
         ESP_LOGI(TAG, "Registering URI handlers");
-        httpd_register_uri_handler(server, &root_dir);
+        httpd_register_uri_handler(_server, &root_dir);
         // httpd_register_uri_handler(server, &echo);
         // httpd_register_uri_handler(server, &ctrl);
-        return server;
+        return ESP_OK;
     }
 
     ESP_LOGE(TAG, "Error starting server!");
-    return NULL;
+    return ESP_FAIL;
 }
 
 void HttpServer::_disconnect_handler(void* arg, esp_event_base_t event_base,
@@ -130,22 +141,23 @@ void HttpServer::_disconnect_handler(void* arg, esp_event_base_t event_base,
 {
     if (HttpServer::_server) {
         ESP_LOGI(TAG, "Stoping webserver");
-        HttpServer::_server = stop_webserver(HttpServer::_server);
+        stop_webserver();
     }
 }
 
-httpd_handle_t HttpServer::stop_webserver(httpd_handle_t server)
+void HttpServer::stop_webserver(void)
 {
-    if (server == NULL) {
-        return NULL;
+    if (_server != NULL) {
+        esp_err_t ret = httpd_stop(_server);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to stop server: %s", esp_err_to_name(ret));
+        }
+        _server = NULL;
+        if (esp_spiffs_mounted(spiffs_config.partition_label)) {
+            ESP_ERROR_CHECK(esp_vfs_spiffs_unregister(spiffs_config.partition_label));
+            ESP_LOGI(TAG, "SPIFFS unmounted");
+        }
+        ESP_LOGI(TAG, "Server stopped successfully");
     }
-    esp_err_t ret = httpd_stop(server);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to stop server: %s", esp_err_to_name(ret));
-        return server; // Return the server handle if stopping failed
-    }
-
-    ESP_LOGI(TAG, "Server stopped successfully");
-    return NULL; // Return NULL if stopping was successful
 }
 } // namespace Http_NS

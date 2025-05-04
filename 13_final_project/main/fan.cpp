@@ -5,6 +5,7 @@ namespace Fan_NS {
 FanPWM::FanPWM(uint8_t& gpio_num, QueueHandle_t* sensor_queue,
     QueueHandle_t* duty_percent_queue)
     : _gpio_num { gpio_num }
+    , _max_duty((LOW_SPEED_MODE_TIMER / _freq_hz) * (2 << (_duty_resolution - 1)))
     , _sensor_queue { sensor_queue }
     , _duty_percent_queue { duty_percent_queue }
 {
@@ -36,7 +37,7 @@ FanPWM::FanPWM(uint8_t& gpio_num, QueueHandle_t* sensor_queue,
     QueueHandle_t* duty_percent_queue, uint32_t freq_hz)
     : FanPWM(gpio_num, sensor_queue, duty_percent_queue)
 {
-    _freq_hz = freq_hz;
+    _timer_conf.freq_hz = _freq_hz;
 }
 FanPWM::FanPWM(uint8_t& gpio_num, QueueHandle_t* sensor_queue,
     QueueHandle_t* duty_percent_queue, uint32_t freq_hz,

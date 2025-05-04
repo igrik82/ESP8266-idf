@@ -13,6 +13,16 @@
 #include "secrets.h" // IWYU pragma: keep
 #include <cstdint>
 
+extern "C" {
+void http_server(void* pvParameter);
+extern TaskHandle_t http_server_handle;
+void get_temperature(void* pvParameter);
+extern TaskHandle_t get_temperature_handle;
+
+extern volatile bool is_http_running;
+extern uint16_t STACK_TASK_SIZE;
+}
+
 typedef struct {
     uint8_t sensor_id; // ID sensor
     float temperature; // Temperature

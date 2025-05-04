@@ -45,3 +45,5 @@ const std::string msg_fan = R"(
   "icon": "mdi:fan",
   "unit_of_meas": "%"
  })";
+
+const std::string command_topic = R"(homeassistant/sensor/HDDdock_command)";

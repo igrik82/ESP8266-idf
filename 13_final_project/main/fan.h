@@ -14,7 +14,7 @@ constexpr uint8_t MIN_TEMP_HDD { 25 };
 constexpr uint8_t MAX_TEMP_HDD { 40 };
 constexpr uint32_t LOW_SPEED_MODE_TIMER = 8000;
 
-static uint32_t _freq_hz { 1000 }; // LOW MODE - 100 Hz - 1000 Hz
+constexpr uint32_t _freq_hz { 1000 }; // LOW MODE - 100 Hz - 1000 Hz
 static constexpr uint8_t NUM_MEAS = 6; // Number of measurements
 
 class FanPWM {
@@ -27,7 +27,7 @@ protected:
     ledc_channel_t _channel { LEDC_CHANNEL_0 }; // LEDC channel (0 - 7)
     int _hpoint { 0 };
     uint32_t _duty { 0 }; // range of duty setting is [0, (2**duty_resolution)]
-    uint32_t _max_duty = (LOW_SPEED_MODE_TIMER / _freq_hz) * (2 << (_duty_resolution - 1));
+    const uint32_t _max_duty;
 
     ledc_timer_config_t _timer_conf; // timer configuration variable
     ledc_channel_config_t _led_chanal_conf; // channel configuration variable

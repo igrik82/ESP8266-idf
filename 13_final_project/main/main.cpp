@@ -16,9 +16,17 @@
 #include <cstdio>
 
 constexpr uint8_t SENSOR_COUNT { 2 };
-constexpr uint16_t STACK_TASK_SIZE { 4096 }; // 1024 * 4
+uint16_t STACK_TASK_SIZE { 4096 }; // 1024 * 4
 
 // ============================ Global Variables ==============================
+
+// Define function for manage mqtt commands topic
+void http_server(void* pvParameter);
+void get_temperature(void* pvParameter);
+
+// To avoid 1-Wire interference from the HTTP server on ESP8266, stop
+// temperature measurements and run the fan at full power.
+volatile bool is_http_running { false };
 
 // TODO: Make class Event Manager
 EventGroupHandle_t common_event_group = xEventGroupCreate();
@@ -26,10 +34,10 @@ EventGroupHandle_t common_event_group = xEventGroupCreate();
 // Queue for fan control must contain at least 6 elements. Because average
 // data contain 6 measurements from sensors
 QueueHandle_t temperature_queue_PWM = xQueueCreate(10, sizeof(SensorData_t));
-
+// Queue for mqtt - % duty cycle
 QueueHandle_t duty_percent_queue = xQueueCreate(5, sizeof(uint8_t));
+// Queue for mqtt - temperature
 QueueHandle_t temperature_queue = xQueueCreate(5, sizeof(SensorData_t));
-
 // ===================== FreeRTOS Tasks =======================================
 // Fan control
 TaskHandle_t fan_control_handle = NULL;
@@ -39,10 +47,27 @@ void fan_control(void* pvParameter)
     uint8_t pin = 13;
 
     Fan_NS::FanPWM fan(pin, &temperature_queue_PWM, &duty_percent_queue);
+    bool set_full_power = { false };
     for (;;) {
-        // Wait for at least 6 measurements
-        if (uxQueueMessagesWaiting(temperature_queue_PWM) >= 6) {
-            fan.start();
+        // If http server is running
+        if (is_http_running == true) {
+            // Turn on the fan
+            if (set_full_power == false) {
+                set_full_power = true;
+                uint8_t power_percent = 100;
+
+                fan.set_duty(fan.get_max_duty());
+                ESP_LOGI("Fan", "Fan is turned on for full power");
+                if (xQueueSend(duty_percent_queue, &power_percent, 0) != pdPASS) {
+                    ESP_LOGE("FAN", "Failed to send duty percent.");
+                }
+            }
+        } else {
+            // Wait for at least 6 measurements
+            if (uxQueueMessagesWaiting(temperature_queue_PWM) >= 6) {
+                fan.start();
+            }
+            set_full_power = false;
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -53,9 +78,19 @@ TaskHandle_t http_server_handle = NULL;
 void http_server(void* pvParameter)
 {
     Http_NS::HttpServer server;
-    for (;;) {
+
+    if (server.start_webserver() != ESP_OK) {
+        is_http_running = false;
+        vTaskDelete(NULL);
+        return;
+    }
+
+    while (is_http_running == true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
+
+    server.stop_webserver();
+    vTaskDelete(NULL);
 }
 
 // Wifi connection
@@ -171,7 +206,7 @@ void checkStackUsage(void* pvParameter)
 {
     {
         for (;;) {
-            UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(get_temperature_handle);
+            UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark(http_server_handle);
             // Warning for visual difference
             ESP_LOGE("StackMonitor", "High Water Mark:%u", highWaterMark);
             vTaskDelay(pdMS_TO_TICKS(5000));
