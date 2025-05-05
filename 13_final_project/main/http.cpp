@@ -119,6 +119,7 @@ esp_err_t HttpServer::start_webserver(void)
         return ESP_OK;
     }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.max_open_sockets = 2;
 
     // Start the httpd server
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
