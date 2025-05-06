@@ -46,4 +46,4 @@ const std::string msg_fan = R"(
   "unit_of_meas": "%"
  })";
 
-const std::string command_topic = R"(homeassistant/sensor/HDDdock_command)";
+const std::string command_topic = R"(homeassistant/sensor/HDDdock_commands)";
