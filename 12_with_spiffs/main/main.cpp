@@ -89,6 +89,7 @@ extern "C" void app_main(void)
             esp_err_to_name(ret));
     } else {
         ESP_LOGI(TAG, "Partition size: total: %zu, used: %zu", total, used);
+        ESP_LOGI(TAG, "All files written to SPIFFS successfully!");
     }
     // ======================= FreeRTOS Specific =============================
     // BUG: Without this, FreeRTOS tasks will crash
