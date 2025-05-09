@@ -10,6 +10,7 @@
 #include "http.h" // IWYU pragma: keep
 #include "mqtt.h"
 #include "nvs_flash.h"
+#include "ota.h"
 #include "wifi_simple.h"
 #include <cmath>
 #include <cstdint>
@@ -23,6 +24,7 @@ uint16_t STACK_TASK_SIZE { 4096 }; // 1024 * 4
 // Define function for manage mqtt commands topic
 void http_server(void* pvParameter);
 void get_temperature(void* pvParameter);
+void ota_update(void* pvParameter);
 
 // To avoid 1-Wire interference from the HTTP server on ESP8266, stop
 // temperature measurements and run the fan at full power.
@@ -184,6 +186,16 @@ void get_temperature(void* pvParameter)
                 }
             }
         }
+    }
+}
+
+TaskHandle_t ota_update_handle = NULL;
+void ota_update(void* pvParameter)
+{
+    Ota_NS::OtaParams* params = static_cast<Ota_NS::OtaParams*>(pvParameter);
+    if (params) {
+        Ota_NS::Ota ota(*params);
+        ota.start_update();
     }
 }
 

@@ -10,6 +10,7 @@
 #include "mqtt_client.h"
 #include "mqtt_device.h" // IWYU pragma: keep
 #include "nvs_flash.h" // IWYU pragma: keep
+#include "ota.h" // IWYU pragma: keep
 #include "secrets.h" // IWYU pragma: keep
 #include <cstdint>
 
@@ -18,6 +19,8 @@ void http_server(void* pvParameter);
 extern TaskHandle_t http_server_handle;
 void get_temperature(void* pvParameter);
 extern TaskHandle_t get_temperature_handle;
+void ota_update(void* pvParameter);
+extern TaskHandle_t ota_update_handle;
 
 extern volatile bool is_http_running;
 extern uint16_t STACK_TASK_SIZE;
