@@ -105,12 +105,12 @@ esp_err_t DS18B20::reset(void)
     pin_direction(GPIO_MODE_OUTPUT);
     set_level(0);
     taskENTER_CRITICAL();
-    esp_delay_us(MASTER_RESET_PULSE_DURATION);
+    os_delay_us(MASTER_RESET_PULSE_DURATION);
     set_level(1);
 
     // Check presence
     pin_direction(GPIO_MODE_INPUT);
-    esp_delay_us(BUS_RECOVERY_DURATION);
+    os_delay_us(BUS_RECOVERY_DURATION);
     uint8_t response_time = 0;
     while (get_pin_level() == 1) {
         if (response_time > SLAVE_RESPONSE_MAX_DURATION) {
@@ -118,10 +118,10 @@ esp_err_t DS18B20::reset(void)
             return ESP_ERR_TIMEOUT;
         }
         ++response_time;
-        esp_delay_us(1);
+        os_delay_us(1);
     }
     taskEXIT_CRITICAL();
-    esp_delay_us(RECOVERY_AFTER_RESET_PULSE);
+    os_delay_us(RECOVERY_AFTER_RESET_PULSE);
     ESP_LOGI(TAG, "Onewire reset success.");
     return ESP_OK;
 }
@@ -167,13 +167,13 @@ uint8_t DS18B20::read_bit(void)
     pin_direction(GPIO_MODE_OUTPUT);
     ets_delay_us(BUS_RECOVERY_DURATION);
     set_level(0);
-    esp_delay_us(MASTER_READ_PULSE_DURATION);
+    os_delay_us(MASTER_READ_PULSE_DURATION);
     set_level(1);
     pin_direction(GPIO_MODE_INPUT);
-    esp_delay_us(MASTER_READ_SAMPLE);
+    os_delay_us(MASTER_READ_SAMPLE);
     uint8_t bit = get_pin_level();
     taskEXIT_CRITICAL();
-    esp_delay_us(MASTER_READ_RECOVERY_DURATION);
+    os_delay_us(MASTER_READ_RECOVERY_DURATION);
     return bit;
 }
 

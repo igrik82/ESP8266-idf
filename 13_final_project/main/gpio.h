@@ -5,7 +5,7 @@
 #include "esp_event.h" // IWYU pragma: keep
 #include "esp_log.h" // IWYU pragma: keep
 
-#define esp_delay_us(x) os_delay_us(x) // Delay in microseconds max 65535 us
+// #define esp_delay_us(x) os_delay_us(x) // Delay in microseconds max 65535 us
 
 // ============================= Reset ========================================
 #define MASTER_RESET_PULSE_DURATION 490
